@@ -27,7 +27,7 @@ Claude Code 插件：学术论文 Word 文档全流程工具包。
 ### 一键安装
 
 ```bash
-git clone https://github.com/你的用户名/Word-agent.git
+git clone https://github.com/qingfuliu071313-arch/Word-agent.git
 cd Word-agent
 bash scripts/setup.sh
 ```
