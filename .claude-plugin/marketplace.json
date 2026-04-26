@@ -1,0 +1,17 @@
+{
+  "name": "word-agent",
+  "owner": {
+    "name": "Liu",
+    "email": "QuinnOdette134@outlook.com"
+  },
+  "plugins": [
+    {
+      "name": "word-agent",
+      "source": "./",
+      "description": "Academic paper Word document agent with specialized modules for document analysis, formatting, content editing, reference management, table/figure formatting, review handling, quality checking, and submission preparation.",
+      "version": "0.1.0",
+      "tags": ["word", "docx", "academic", "paper", "formatting", "manuscript", "review"],
+      "category": "Research"
+    }
+  ]
+}

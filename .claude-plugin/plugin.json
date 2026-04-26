@@ -1,0 +1,8 @@
+{
+  "name": "word-agent",
+  "version": "0.1.0",
+  "description": "Academic paper Word document agent — formatting, editing, reviewing, and submission preparation",
+  "license": "MIT",
+  "skills": "./skills/",
+  "keywords": ["word", "docx", "academic", "paper", "formatting", "manuscript"]
+}

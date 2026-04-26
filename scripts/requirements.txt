@@ -1,0 +1,13 @@
+# Word-Agent Python Dependencies
+
+# P0: Core (word-reader)
+docx2python>=2.0.0
+deepdiff>=6.0
+redlines>=0.4.0
+
+# P2: Content editing
+python-docx-replace>=0.4.0
+
+# P3: Reference management + Document merging
+docxcompose>=1.4.0
+citeproc-py>=0.6.0
