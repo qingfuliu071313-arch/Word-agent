@@ -40,6 +40,7 @@
 | 参考文献格式化 | `citeproc-py` + CSL | 手动格式化 | 配合 Zotero MCP |
 | 文档合并 | `docxcompose` | 手动 XML | 自动处理样式冲突 |
 | 文档复制 | `copy_document` | Bash cp | MCP 保持文档完整性 |
+| .doc→.docx 转换 | `soffice --headless --convert-to docx` + 后处理修复 | 用户手动用 Word 另存为 | 转换后必须修复兼容模式和字体，见 `doc_conversion.md` |
 | 转 PDF | `soffice.py --convert-to pdf` | — | LibreOffice |
 
 ## 降级触发条件

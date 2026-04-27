@@ -62,15 +62,33 @@ ELSE
 
 Before routing to any module:
 
-1. **Document Map check** — Does a Document Map exist in the conversation context?
+1. **File format check** — Is the input file `.doc` (legacy binary format)?
+   - YES → run .doc→.docx conversion pipeline:
+     ```
+     a. Verify LibreOffice available: `which soffice`
+        - Not found → tell user: "需要 LibreOffice 来转换 .doc 文件。请安装 LibreOffice，或手动用 Word 打开 .doc 并另存为 .docx。"
+     b. Convert: `soffice --headless --convert-to docx --outdir "{dir}" "{file.doc}"`
+        - If same-name .docx exists → save as `{name}-converted.docx`
+     c. Post-fix LibreOffice artifacts (MANDATORY):
+        - compatibilityMode 11 → 15
+        - Liberation Serif → Times New Roman, Liberation Sans → Arial
+        - 宋体;SimSun → 宋体, 黑体;SimHei → 黑体, 新宋体 → 宋体
+        - Heading1 basedOn TOC1 → basedOn Normal
+     d. Report to user: "已将 {name}.doc 转换为 .docx 并修复格式兼容性问题。后续操作基于转换后的文件。"
+     e. Update file_path to point to the new .docx
+     ```
+     See `references/doc_conversion.md` for complete conversion code.
+   - NO (already .docx) → continue
+
+2. **Document Map check** — Does a Document Map exist in the conversation context?
    - YES → pass it to the target module
    - NO → run word-read first to generate one (unless task is word-read itself)
 
-2. **Format Spec check** — Does the task require formatting rules?
+3. **Format Spec check** — Does the task require formatting rules?
    - YES → check if user has provided format requirements
    - NO format requirements yet → ask user: "请提供格式要求文档（Word/PDF/文字描述均可）"
 
-3. **Token budget assessment** — Estimate operation scale:
+4. **Token budget assessment** — Estimate operation scale:
    - Small (< 5 changes) → proceed directly
    - Medium (5-20 changes) → show plan, ask confirmation
    - Large (20+ changes) → show plan with estimated scope, ask confirmation

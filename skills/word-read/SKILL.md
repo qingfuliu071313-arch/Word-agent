@@ -51,6 +51,19 @@ ELIF downstream module needs specific paragraphs
 
 ## Analysis Mode: Document Map Generation
 
+### Step 0: File Format Gate
+
+Before any analysis, check if the input is a `.doc` file:
+
+```
+IF file_path ends with ".doc" (case-insensitive):
+  → Abort analysis
+  → Return to orchestrator: "文件为旧版 .doc 格式，需要先转换为 .docx。请通过 word-orchestrate 触发转换流程。"
+  → Do NOT attempt to call docx2python or MCP tools on .doc files — they will fail
+```
+
+This ensures `.doc` files are always handled by the orchestrator's conversion pipeline before reaching the reader.
+
 ### Step 1: Basic Info (Cheap)
 
 ```

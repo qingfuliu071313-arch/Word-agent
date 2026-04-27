@@ -22,6 +22,21 @@ You do NOT perform document operations yourself. You analyze the user's request,
 3. **Workflow Orchestration** — Coordinate multi-module tasks (e.g., format → check → clean)
 4. **Document Map Management** — Ensure word-reader runs first when needed, cache results for downstream modules
 
+## .doc File Handling
+
+If the user provides a `.doc` file (legacy binary format, NOT `.docx`):
+
+1. **Detect** — Check file extension and OLE2 magic bytes (`D0 CF 11 E0`)
+2. **Convert** — Run `soffice --headless --convert-to docx` to produce `.docx`
+3. **Post-fix** — Apply mandatory fixes for LibreOffice conversion artifacts:
+   - `compatibilityMode` 11 → 15
+   - `Liberation Serif/Sans` → `Times New Roman` / `Arial`
+   - East Asian font cleanup (`宋体;SimSun` → `宋体`, `新宋体` → `宋体`)
+   - `Heading1 basedOn TOC1` → `basedOn Normal`
+4. **Report** — Inform user of conversion, then proceed with `.docx` workflow
+
+See `references/doc_conversion.md` for full conversion code and font mapping table.
+
 ## Routing Decision Tree
 
 | User Intent | Keywords (EN) | Keywords (CN) | Route to |

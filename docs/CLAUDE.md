@@ -10,7 +10,9 @@ Do NOT activate word-agent modules for:
 - Pure academic writing without a Word document target (use eco-agent instead)
 - General coding tasks
 
-Only activate when the request involves **Word document (.docx) operations** — reading, formatting, editing, or managing a .docx file, or explicit module invocation (`/word-agent:...`).
+Only activate when the request involves **Word document (.docx or .doc) operations** — reading, formatting, editing, or managing a Word document file, or explicit module invocation (`/word-agent:...`).
+
+**Legacy .doc support:** When the user provides a `.doc` file (old binary format), the orchestrator will automatically convert it to `.docx` via LibreOffice and apply post-processing fixes before proceeding. See `references/doc_conversion.md`.
 
 When ambiguous, ask: "您是需要操作 Word 文档，还是需要其他帮助？"
 

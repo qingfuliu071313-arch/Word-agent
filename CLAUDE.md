@@ -86,3 +86,4 @@ Analyze this document: paper.docx
 | A shared reference file | All SKILL.md files that reference it |
 | Plugin manifests | Version numbers match across files |
 | `references/tool_routing.md` | All SKILL.md tool selection logic |
+| `references/doc_conversion.md` | `skills/word-orchestrate/SKILL.md` Phase 2, `agents/word-orchestrator.md` .doc handling |
