@@ -354,6 +354,20 @@ bash scripts/setup.sh
 
 ---
 
+## Acknowledgments / 致谢
+
+Word-Agent's multi-backend architecture was inspired by and integrates with the following open-source projects. We thank their authors for their excellent work.
+
+Word-Agent 的多后端架构受到以下开源项目的启发并与之集成。感谢这些项目的作者们的出色工作。
+
+| Project / 项目 | Author / 作者 | License | Contribution / 贡献 |
+|----------------|--------------|---------|---------------------|
+| [word-mcp-live](https://github.com/ykarapazar/word-mcp-live) | ykarapazar | MIT | Live editing, native tracked changes, threaded comments, equation insertion / 实时编辑、原生修订、线程批注、公式插入 |
+| [docx-mcp](https://github.com/SecurityRonin/docx-mcp) | SecurityRonin | MIT | Structural validation, selective accept/reject, PII scrubbing / 结构验证、选择性修订处理、PII 清洗 |
+| [adeu](https://github.com/dealfluence/adeu) | dealfluence | MIT | Markdown intermediate representation for bulk editing / 批量编辑的 Markdown 中间表示 |
+
+---
+
 ## License
 
-MIT
+[MIT](LICENSE)
