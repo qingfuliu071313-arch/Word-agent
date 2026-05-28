@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/qingfu/Desktop/Claude项目管理/Word-agent/.claude/hooks/word-agent-router.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
