@@ -132,15 +132,41 @@ format_spec:
 ### 从 Word/PDF 格式要求文档提取
 
 1. 读取文档全文
-2. 搜索关键词定位格式规则段落：
+2. **提取文本框内容（关键步骤）** — 格式模板中的格式要求常常写在文本框（TextBox）里作为注释/批注。`get_document_text` 和 `docx2python` 都无法读取文本框内容。必须通过解析文档 XML 提取 `w:txbxContent` 元素：
+   ```bash
+   python3 << 'PYEOF'
+   import zipfile
+   import xml.etree.ElementTree as ET
+
+   ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+
+   with zipfile.ZipFile("{file_path}", 'r') as z:
+       xml_content = z.read('word/document.xml')
+
+   root = ET.fromstring(xml_content)
+   for i, txbx in enumerate(root.findall('.//w:txbxContent', ns)):
+       paragraphs = []
+       for p in txbx.findall('.//w:p', ns):
+           text = ''.join(r.text or '' for r in p.findall('.//w:t', ns))
+           if text.strip():
+               paragraphs.append(text)
+       if paragraphs:
+           print(f"[TextBox {i+1}]")
+           for t in paragraphs:
+               print(f"  {t}")
+           print()
+   PYEOF
+   ```
+   将文本框内容与正文内容合并后一起搜索格式规则。
+3. 搜索关键词定位格式规则段落（正文 + 文本框内容）：
    - 页面设置相关：`页边距|页面大小|纸张|margin|page size`
    - 字体相关：`字体|字号|font|size|宋体|黑体|Times`
    - 行距相关：`行距|行间距|段距|spacing|line`
    - 编号相关：`编号|图|表|公式|numbering|figure|table`
    - 页眉页脚：`页眉|页脚|页码|header|footer|page number`
-3. 对每个匹配区域提取具体数值
-4. 组装为 Format Spec 结构
-5. 对未明确指定的字段标记为 `null`（不做修改）
+4. 对每个匹配区域提取具体数值
+5. 组装为 Format Spec 结构
+6. 对未明确指定的字段标记为 `null`（不做修改）
 
 ### 从口头描述提取
 

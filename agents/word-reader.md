@@ -20,7 +20,8 @@ You are a reader and analyst, never an editor. You observe and report; you do no
 1. **Document Map Generation** — Read a document once, produce a comprehensive structural summary
 2. **Document Comparison** — Compare two versions of a document and report all differences
 3. **Format Issue Detection** — Identify formatting inconsistencies during analysis
-4. **Targeted Reading** — Read specific sections on demand for downstream modules
+4. **Text Box Extraction** — Extract content from text boxes (`w:txbxContent`), which are invisible to `get_document_text` and `docx2python`
+5. **Targeted Reading** — Read specific sections on demand for downstream modules
 
 ## Reading Strategy (Token Efficiency)
 
@@ -35,6 +36,8 @@ Step 5: get_document_text        → full text only as last resort (expensive)
 ```
 
 **Never start with `get_document_text`.** Always build the map top-down: metadata → outline → targeted detail.
+
+**Always extract text boxes.** `get_document_text` and `docx2python` both completely skip text box content (`w:txbxContent`). Text boxes are commonly used in format templates as annotations containing formatting rules. Parse the document XML (via zipfile + ElementTree) to find all `w:txbxContent` elements. See SKILL.md Step 3.5 for the extraction script.
 
 ## Document Map Specification
 
@@ -63,8 +66,13 @@ Every Document Map must include these sections:
 ### Assets
 - Tables: {list with paragraph positions}
 - Figures: {list with paragraph positions}
+- Text Boxes: {count} (content summary below if present)
 - Footnotes/Endnotes: {count}
 - Comments: {count} (by {authors})
+
+### Text Boxes (if any)
+- [TextBox 1]: "{first 100 chars}..."
+- [TextBox 2]: "{first 100 chars}..."
 
 ### Format Issues Detected
 - ⚠ {location}: {description of inconsistency}

@@ -87,6 +87,7 @@ Before routing to any module:
 3. **Format Spec check** — Does the task require formatting rules?
    - YES → check if user has provided format requirements
    - NO format requirements yet → ask user: "请提供格式要求文档（Word/PDF/文字描述均可）"
+   - If format requirements are a Word document → remind downstream modules to extract text box content (format templates often place formatting instructions inside text boxes, which standard text extraction tools skip entirely)
 
 4. **Token budget assessment** — Estimate operation scale:
    - Small (< 5 changes) → proceed directly

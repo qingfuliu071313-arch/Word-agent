@@ -109,6 +109,50 @@ print(json.dumps(info, ensure_ascii=False, indent=2))
 PYEOF
 ```
 
+### Step 3.5: Text Box Extraction (Critical)
+
+**`get_document_text` and `docx2python` both skip text boxes entirely.** Text boxes (`w:txbxContent`) live in a separate XML layer (inside DrawingML or VML shapes) and are invisible to standard text extraction. This is especially important for format requirement templates where instructions are often placed inside text boxes as annotations.
+
+Extract text box content by parsing the raw XML:
+
+```bash
+python3 << 'PYEOF'
+import zipfile
+import xml.etree.ElementTree as ET
+import json
+
+ns = {
+    'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
+    'mc': 'http://schemas.openxmlformats.org/markup-compatibility/2006',
+    'wps': 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape',
+    'v': 'urn:schemas-microsoft-com:vml',
+}
+
+with zipfile.ZipFile("{file_path}", 'r') as z:
+    xml_content = z.read('word/document.xml')
+
+root = ET.fromstring(xml_content)
+
+# w:txbxContent captures both DrawingML and VML text boxes
+textboxes = root.findall('.//w:txbxContent', ns)
+
+results = []
+for i, txbx in enumerate(textboxes):
+    paragraphs = []
+    for p in txbx.findall('.//w:p', ns):
+        runs = p.findall('.//w:t', ns)
+        para_text = ''.join(r.text or '' for r in runs)
+        if para_text.strip():
+            paragraphs.append(para_text)
+    if paragraphs:
+        results.append({"index": i + 1, "content": paragraphs})
+
+print(json.dumps({"textbox_count": len(results), "textboxes": results}, ensure_ascii=False, indent=2))
+PYEOF
+```
+
+If text boxes are found, include their content in the Document Map under the new **Text Boxes** section. This is critical for format requirement templates where formatting rules are annotated inside text boxes.
+
 ### Step 4: Comment & Footnote Check (If Present)
 
 ```
@@ -155,9 +199,16 @@ Compile all gathered information into the standard Document Map format:
 ### Assets
 - Tables: Table 1 (P{n}), Table 2 (P{n}), ...
 - Figures: Fig 1 (P{n}), Fig 2 (P{n}), ...
+- Text Boxes: {count} (content summary below if present)
 - Footnotes: {count}
 - Endnotes: {count}
 - Comments: {count} (by: {author1} ×{n}, {author2} ×{n})
+
+### Text Boxes (if any)
+- [TextBox 1]: "{first 100 chars of content}..."
+- [TextBox 2]: "{first 100 chars of content}..."
+...
+(omit this section if no text boxes found)
 
 ### Format Issues Detected
 - ⚠ P{n}: {description}

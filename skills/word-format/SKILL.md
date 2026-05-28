@@ -55,10 +55,11 @@ The user may provide format requirements as:
 Follow `../../references/format_spec_parser.md` to extract a structured Format Spec:
 
 1. Read the format requirement document
-2. Search for keywords: 页边距, 字体, 字号, 行距, 编号, 页码, margins, font, spacing...
-3. Extract specific values for each rule
-4. For Chinese font sizes, convert using the size chart in `format_spec_parser.md`
-5. Mark unspecified rules as `null`
+2. **Extract text box content (critical)** — Format templates frequently place formatting instructions inside text boxes as annotations. `get_document_text` and `docx2python` completely skip text boxes. You MUST parse the document XML to extract `w:txbxContent` elements. See `format_spec_parser.md` Step 2 for the extraction script. Merge text box content with body text before searching for rules.
+3. Search for keywords (in both body text AND text box content): 页边距, 字体, 字号, 行距, 编号, 页码, margins, font, spacing...
+4. Extract specific values for each rule
+5. For Chinese font sizes, convert using the size chart in `format_spec_parser.md`
+6. Mark unspecified rules as `null`
 
 ### User Confirmation
 

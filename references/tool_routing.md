@@ -36,6 +36,7 @@
 | 接受所有修订 | `accept_changes.py` 脚本 | 手动 XML | docx skill 脚本 |
 | 添加批注 | `comment.py` + XML 标记 | 无 MCP 替代 | docx skill 脚本 |
 | 生成目录 | XML 插入 TOC 域代码 | docx-js `TableOfContents` | 需要用户在 Word 中更新域 |
+| 提取文本框内容 | `zipfile` + `ElementTree` 解析 XML `w:txbxContent` | `get_document_xml` + 手动解析 | `get_document_text` 和 `docx2python` 均跳过文本框，必须走 XML 解析 |
 | 文档对比 | `docx2python` + `deepdiff` + `redlines` | 逐段 MCP 读取 + diff | Python 管道最高效 |
 | 参考文献格式化 | `citeproc-py` + CSL | 手动格式化 | 配合 Zotero MCP |
 | 文档合并 | `docxcompose` | 手动 XML | 自动处理样式冲突 |
