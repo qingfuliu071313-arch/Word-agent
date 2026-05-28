@@ -1,0 +1,15 @@
+.git
+.github
+.claude
+.omc
+__pycache__
+*.pyc
+*.pyo
+.DS_Store
+test/
+documents/
+*.docx
+*.doc
+~$*
+.env
+node_modules

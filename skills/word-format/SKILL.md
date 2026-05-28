@@ -9,7 +9,7 @@ description: >-
   目录, 生成目录, TOC, 中英文混排, 标点, 全角半角.
 allowed-tools: Read Write Bash Glob Grep mcp__word-document-server__format_text mcp__word-document-server__create_custom_style mcp__word-document-server__search_and_replace mcp__word-document-server__set_table_width mcp__word-document-server__set_table_column_widths mcp__word-document-server__format_table mcp__word-document-server__highlight_table_header mcp__word-document-server__add_heading mcp__word-document-server__add_page_break mcp__word-document-server__get_document_info mcp__word-document-server__get_document_outline mcp__word-document-server__get_document_text mcp__word-document-server__get_paragraph_text_from_document mcp__word-document-server__find_text_in_document mcp__word-document-server__get_document_xml
 metadata:
-    version: "0.1.0"
+    version: "1.0.0"
     category: formatting
     upstream-skills: [word-read]
     downstream-skills: [word-check]

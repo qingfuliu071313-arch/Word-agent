@@ -7,9 +7,9 @@ description: >-
   produces structured diff reports. Triggers: 读取, 分析, 对比, 比较, read,
   analyze, compare, diff, 看看这个文档, 这两版有什么区别.
   Not for editing (word-edit) or formatting (word-format).
-allowed-tools: Read Bash Glob Grep mcp__word-document-server__get_document_info mcp__word-document-server__get_document_outline mcp__word-document-server__get_document_text mcp__word-document-server__get_paragraph_text_from_document mcp__word-document-server__find_text_in_document mcp__word-document-server__get_all_comments mcp__word-document-server__get_comments_by_author mcp__word-document-server__validate_document_footnotes mcp__word-document-server__get_document_xml mcp__word-document-server__list_available_documents
+allowed-tools: Read Bash Glob Grep mcp__word-document-server__get_document_info mcp__word-document-server__get_document_outline mcp__word-document-server__get_document_text mcp__word-document-server__get_paragraph_text_from_document mcp__word-document-server__find_text_in_document mcp__word-document-server__get_all_comments mcp__word-document-server__get_comments_by_author mcp__word-document-server__validate_document_footnotes mcp__word-document-server__get_document_xml mcp__word-document-server__list_available_documents mcp__docx-mcp__get_tracked_changes
 metadata:
-    version: "0.1.0"
+    version: "1.0.0"
     category: analysis
     downstream-skills: [word-format, word-edit, word-reference, word-table-figure, word-review, word-check, word-submit]
 ---
@@ -153,11 +153,14 @@ PYEOF
 
 If text boxes are found, include their content in the Document Map under the new **Text Boxes** section. This is critical for format requirement templates where formatting rules are annotated inside text boxes.
 
-### Step 4: Comment & Footnote Check (If Present)
+### Step 4: Comment, Footnote & Tracked Changes Check (If Present)
 
 ```
-Call: get_all_comments(file_path)        → if document has comments
+Call: get_all_comments(file_path)           → if document has comments
 Call: validate_document_footnotes(file_path) → if document has footnotes
+Call: mcp__docx-mcp__get_tracked_changes(file_path) → if document may have revisions
+  → Extract: total count, insertions vs deletions, author distribution, affected sections
+  → If docx-mcp unavailable, scan XML for <w:ins>/<w:del> elements as fallback
 ```
 
 ### Step 5: Format Sampling
@@ -225,12 +228,20 @@ Compile all gathered information into the standard Document Map format:
 - Footnotes: {count}
 - Endnotes: {count}
 - Comments: {count} (by: {author1} ×{n}, {author2} ×{n})
+- Tracked Changes: {count} (ins: {n}, del: {n}, by: {author1} ×{n}, {author2} ×{n})
 
 ### Text Boxes (if any)
 - [TextBox 1]: "{first 100 chars of content}..."
 - [TextBox 2]: "{first 100 chars of content}..."
 ...
 (omit this section if no text boxes found)
+
+### Tracked Changes (if any)
+- Total: {count} changes ({ins_count} insertions, {del_count} deletions)
+- Authors: {author1} ×{n}, {author2} ×{n}
+- Scope: {affected_sections_summary}
+...
+(omit this section if no tracked changes found)
 
 ### Format Issues Detected
 - ⚠ P{n}: {description}

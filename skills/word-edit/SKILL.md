@@ -7,9 +7,9 @@ description: >-
   path for each operation.
   Triggers: 修改内容, 改写, 替换, 把XX改成YY, change, rewrite, modify,
   replace, 添加段落, 删除段落, tracked changes, 修订模式.
-allowed-tools: Read Write Edit Bash Glob Grep mcp__word-document-server__create_document mcp__word-document-server__create_custom_style mcp__word-document-server__copy_document mcp__word-document-server__add_heading mcp__word-document-server__format_text mcp__word-document-server__search_and_replace mcp__word-document-server__insert_line_or_paragraph_near_text mcp__word-document-server__replace_paragraph_block_below_header mcp__word-document-server__replace_block_between_manual_anchors mcp__word-document-server__delete_paragraph mcp__word-document-server__add_paragraph mcp__word-document-server__insert_header_near_text mcp__word-document-server__insert_numbered_list_near_text mcp__word-document-server__find_text_in_document mcp__word-document-server__get_paragraph_text_from_document mcp__word-document-server__get_document_outline
+allowed-tools: Read Write Edit Bash Glob Grep mcp__word-document-server__create_document mcp__word-document-server__create_custom_style mcp__word-document-server__copy_document mcp__word-document-server__add_heading mcp__word-document-server__format_text mcp__word-document-server__search_and_replace mcp__word-document-server__insert_line_or_paragraph_near_text mcp__word-document-server__replace_paragraph_block_below_header mcp__word-document-server__replace_block_between_manual_anchors mcp__word-document-server__delete_paragraph mcp__word-document-server__add_paragraph mcp__word-document-server__insert_header_near_text mcp__word-document-server__insert_numbered_list_near_text mcp__word-document-server__find_text_in_document mcp__word-document-server__get_paragraph_text_from_document mcp__word-document-server__get_document_outline mcp__word-mcp-live__edit_text mcp__word-mcp-live__insert_text mcp__word-mcp-live__delete_text mcp__word-mcp-live__replace_text mcp__word-mcp-live__get_active_document mcp__word-mcp-live__undo_last_operation mcp__word-mcp-live__insert_equation mcp__word-mcp-live__insert_cross_reference
 metadata:
-    version: "0.1.0"
+    version: "1.0.0"
     category: editing
     upstream-skills: [word-read]
     downstream-skills: [word-check]
@@ -58,7 +58,8 @@ IF user says "从零写" or "新建文档" or "create document" or "write from s
   → New Document Mode (create_document + add_heading + add_paragraph)
 
 ELIF user says "修订模式" or "tracked changes" or "保留修改痕迹"
-  → Tracked Changes Mode (XML)
+  → Native Tracked Changes Mode (word-mcp-live, preferred)
+  → IF word-mcp-live unavailable → Legacy Tracked Changes Mode (XML fallback)
 
 ELIF change is word/phrase replacement ("把X改成Y")
   → Precise Replace Mode (search_and_replace)
@@ -77,6 +78,12 @@ ELIF change is deleting a paragraph
 
 ELIF change is adding a heading
   → Header Insert Mode (insert_header_near_text)
+
+ELIF user says "插入公式" or "insert equation" or "add formula"
+  → Equation Insert Mode (word-mcp-live insert_equation)
+
+ELIF user says "插入引用" or "cross-reference" or "引用图/表/式"
+  → Cross-Reference Insert Mode (word-mcp-live insert_cross_reference)
 ```
 
 ## Phase 3: Execute
@@ -117,9 +124,40 @@ ELIF change is adding a heading
 2. Call delete_paragraph(file_path, paragraph_index)
 ```
 
-### Tracked Changes Mode
+### Native Tracked Changes Mode (Preferred)
 
-For edits that must show revision marks in Word:
+Uses word-mcp-live with `track_changes: true` for native revision marks. No XML manipulation needed.
+
+```
+1. For replacement:
+   mcp__word-mcp-live__replace_text(file_path, old_text, new_text, track_changes=true)
+
+2. For insertion:
+   mcp__word-mcp-live__insert_text(file_path, anchor_text, new_text, position="after", track_changes=true)
+
+3. For deletion:
+   mcp__word-mcp-live__delete_text(file_path, target_text, track_changes=true)
+
+4. For paragraph rewrite:
+   mcp__word-mcp-live__edit_text(file_path, old_text, new_text, track_changes=true)
+```
+
+**Advantages over XML mode:**
+- Single MCP call per edit (no unpack/edit/pack triple)
+- Word-native revision marks with correct author/date
+- No risk of malformed OOXML
+- Author set via `MCP_AUTHOR` environment variable (default: "Claude")
+
+**When to fall back to Legacy mode:**
+- word-mcp-live server is not available
+- Edit spans across complex nested structures (tables within tracked changes)
+- MCP call returns error
+
+See `../../references/tracked_changes.md` for full parameter reference.
+
+### Legacy Tracked Changes Mode (XML Fallback)
+
+For edits that must show revision marks when word-mcp-live is unavailable:
 
 ```
 1. Unpack document:
@@ -154,6 +192,57 @@ Replacement ("30 days" → "60 days"):
 - Copy the original `<w:rPr>` formatting block into tracked change runs
 - Use `<w:delText>` inside `<w:del>`, never `<w:t>`
 - Each `w:id` must be unique across the document
+
+### Equation Insert Mode
+
+Requires word-mcp-live. Accepts LaTeX input, converts to OMML (Word-native equation format).
+
+```
+1. Collect from user:
+   - LaTeX expression (e.g., "E = mc^2")
+   - Display mode (display=centered on own line, inline=within text)
+   - Equation number (e.g., "(1)" — optional, for display equations)
+   - Position (after which text to insert)
+
+2. Insert equation:
+   mcp__word-mcp-live__insert_equation(
+     file_path, latex="{expression}",
+     display=true/false, equation_number="(1)",
+     position="after", anchor_text="{anchor}"
+   )
+
+3. If word-mcp-live unavailable:
+   → Warn: "公式插入需要 word-mcp-live。请安装后重试。"
+   → Manual OMML XML insertion is possible but not recommended.
+```
+
+See `../../references/equation_crossref.md` for LaTeX patterns and OMML details.
+
+### Cross-Reference Insert Mode
+
+Creates live cross-references that update when the document changes.
+
+```
+1. Collect from user:
+   - Reference type: heading / figure / table / equation / bookmark
+   - Target: which heading/figure/table to reference
+   - Display format: label_number ("图1") / number_only ("1") / page / text
+
+2. Insert cross-reference:
+   mcp__word-mcp-live__insert_cross_reference(
+     file_path, ref_type="{type}", ref_target="{target}",
+     ref_format="label_number",
+     position="after", anchor_text="{anchor}"
+   )
+
+3. If word-mcp-live unavailable:
+   → Fall back to plain text reference (e.g., manually type "图1")
+   → Warn: "已插入纯文本引用。建议安装 word-mcp-live 以使用自动更新的交叉引用。"
+```
+
+See `../../references/equation_crossref.md` for reference types and format options.
+
+---
 
 ## Phase 4: Verify & Font Normalization
 
@@ -325,8 +414,112 @@ When user requests multiple changes:
 3. For multiple search_and_replace calls, execute sequentially
 4. Report results for each change
 
+---
+
+## Live Editing Mode
+
+When the orchestrator detects that Word has the target document open (via `get_active_document`), all edits go through word-mcp-live's live automation. Each operation appears instantly in the Word UI.
+
+### Behavior Differences from File Mode
+
+| Aspect | File Mode | Live Mode |
+|--------|-----------|-----------|
+| Write tool | word-document-server | word-mcp-live |
+| Changes visible | After reopening file | Immediately in Word |
+| Font normalization | Runs immediately | Deferred (file locked) |
+| Undo support | No (use document copy) | Yes (`undo_last_operation`) |
+| Tracked changes | Native or Legacy XML | Native only (track_changes=true) |
+
+### Rules
+
+- **No mixed modes** — Never use word-document-server write tools and word-mcp-live live tools on the same file in the same session
+- **Deferred font normalization** — File is locked by Word; run `normalize_fonts.py --check-lock` to detect. Warn user to close Word before normalizing, or defer to next session
+- **Each MCP call = one undo step** — User can undo individual operations via "撤销"
+
+See `../../references/live_editing.md` for platform detection and full reference.
+
+---
+
+## Bulk Edit via Markdown Mode
+
+For large-scale edits (10+ changes simultaneously), use adeu to convert the document to Markdown, apply CriticMarkup edits, and write back. This is significantly more token-efficient than making 10+ individual MCP calls.
+
+### Trigger Conditions
+
+```
+IF number of planned changes >= 10
+  OR user says "批量修改" / "bulk edit"
+  OR word-reviewer Phase 3 has >= 10 revision items
+THEN → suggest Bulk Edit via Markdown Mode
+```
+
+### Pipeline
+
+```
+Step 1: Extract document to Markdown
+  python3 -c "
+  from adeu import RedlineEngine
+  engine = RedlineEngine('{file_path}')
+  md_text = engine.to_markdown()
+  print(md_text)
+  "
+
+Step 2: Generate CriticMarkup edits
+  Apply all planned changes as CriticMarkup syntax:
+  - Insertion: {++new text++}
+  - Deletion: {--old text--}
+  - Replacement: {~~old text~>new text~~}
+
+Step 3: Validate changes
+  python3 -c "
+  from adeu import ModifyText
+  mt = ModifyText('{file_path}')
+  result = mt.validate(critic_markup_text)
+  print(result)
+  "
+  → If validation fails (ambiguous matches) → fall back to individual MCP calls
+
+Step 4: Apply changes atomically
+  python3 -c "
+  from adeu import ModifyText
+  mt = ModifyText('{file_path}')
+  mt.apply(critic_markup_text, track_changes=True, output='{output_path}')
+  "
+
+Step 5: Font normalization gate
+  python3 scripts/normalize_fonts.py "{output_path}" --unify
+```
+
+### Fallback
+
+If adeu is not installed or validation fails on any edit, fall back to individual MCP calls (standard word-edit modes). Never apply partially validated CriticMarkup.
+
+See `../../references/adeu_integration.md` for CriticMarkup syntax and SDK reference.
+
+---
+
+## Phase 5: Undo Support (Live Mode Only)
+
+When operating in live editing mode, each word-mcp-live operation can be undone individually:
+
+```
+User: "撤销" / "undo" / "回退上一步"
+  → mcp__word-mcp-live__undo_last_operation()
+  → Equivalent to Ctrl+Z in Word
+  → Can be called multiple times for multi-step undo
+
+User: "撤销最近3步"
+  → Call undo_last_operation() 3 times sequentially
+```
+
+**Undo is NOT available in file mode.** For file-mode safety, word-edit always works on a copy (via `copy_document`) for destructive operations, and the original remains as backup.
+
 ## Shared Resources
 
 - `../../references/tool_routing.md` — Tool selection priority and fallback rules
 - `../../references/token_budget.md` — Token efficiency rules
 - `../../references/document_creation_rules.md` — New document anti-pattern rules (字体配对、内置样式、TOC)
+- `../../references/tracked_changes.md` — Native vs Legacy tracked changes reference
+- `../../references/live_editing.md` — Live editing platform detection and mode rules
+- `../../references/adeu_integration.md` — adeu Markdown bulk editing pipeline
+- `../../references/equation_crossref.md` — Equation (LaTeX→OMML) and cross-reference insertion

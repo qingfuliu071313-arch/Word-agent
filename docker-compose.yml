@@ -1,0 +1,21 @@
+# word-agent Docker Compose configuration
+# Usage: docker compose up -d
+# Mount your documents directory to /documents
+
+services:
+  word-agent:
+    build: .
+    volumes:
+      - ./documents:/documents
+      - ./scripts:/app/scripts
+    environment:
+      - MCP_AUTHOR=Claude
+      - WORD_DOC_SERVER_PORT=3100
+      - WORD_MCP_LIVE_PORT=3101
+      - DOCX_MCP_PORT=3102
+    ports:
+      - "3100:3100"
+      - "3101:3101"
+      - "3102:3102"
+    stdin_open: true
+    tty: true

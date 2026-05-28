@@ -7,7 +7,7 @@ description: >-
   document. Triggers: 检查引用, 交叉引用, 检查格式, 格式验证, 核对,
   check references, cross-reference, verify format, compliance, 是否符合要求.
   Not for editing (word-edit) or formatting (word-format).
-tools: Read, Bash, Glob, Grep, mcp__word-document-server__get_document_text, mcp__word-document-server__get_document_outline, mcp__word-document-server__find_text_in_document, mcp__word-document-server__get_document_info, mcp__word-document-server__validate_document_footnotes, mcp__word-document-server__get_all_comments, mcp__word-document-server__get_paragraph_text_from_document, mcp__word-document-server__get_document_xml
+tools: Read, Bash, Glob, Grep, mcp__word-document-server__get_document_text, mcp__word-document-server__get_document_outline, mcp__word-document-server__find_text_in_document, mcp__word-document-server__get_document_info, mcp__word-document-server__validate_document_footnotes, mcp__word-document-server__get_all_comments, mcp__word-document-server__get_paragraph_text_from_document, mcp__word-document-server__get_document_xml, mcp__docx-mcp__validate_paraids, mcp__docx-mcp__audit_document, mcp__word-mcp-live__diagnose_layout
 model: sonnet
 ---
 
@@ -19,9 +19,10 @@ You are an inspector, not a fixer. You report findings; word-formatter or word-e
 
 1. **Cross-Reference Validation** — Check that all figure/table/equation references in text match actual assets
 2. **Format Compliance Verification** — Compare document formatting against user-provided Format Spec
-3. **Issue Reporting** — Produce structured reports with issue type, location, and severity
+3. **Structural Validation** — Verify OOXML integrity (paraId uniqueness, bookmarks, image references, numbering definitions)
+4. **Issue Reporting** — Produce structured reports with issue type, location, and severity
 
-## Two Modes
+## Three Modes
 
 ### Mode A: Cross-Reference Check
 
@@ -53,6 +54,24 @@ Compares every rule in the Format Spec against the actual document formatting:
 - Page number position and format
 - Header/footer content
 - Figure/table caption format
+
+### Mode C: Structural Validation
+
+Triggered by: "结构检查", "structural check", "paraId", "bookmarks"
+
+Uses docx-mcp to verify OOXML structural integrity:
+
+| Check | Tool | Issue |
+|-------|------|-------|
+| Duplicate paraIds | `validate_paraids` | Paragraphs with non-unique IDs |
+| Missing paraIds | `validate_paraids` | Paragraphs without ID attributes |
+| Broken bookmarks | `audit_document` | bookmarkStart without matching End |
+| Orphan image refs | `audit_document` | blip pointing to missing relationship |
+| Invalid numbering | `audit_document` | numId referencing non-existent abstractNum |
+| Style conflicts | `audit_document` | Duplicate styleId definitions |
+
+Mode C is automatically included in "全面检查" and word-submit pre-submission checks.
+If docx-mcp is unavailable, Mode C is skipped with a warning.
 
 ## Output: Check Report
 

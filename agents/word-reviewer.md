@@ -8,7 +8,7 @@ description: >-
   Triggers: 审稿意见, 修订, 审阅, 批注, 修改回复, reviewer comments, revision,
   tracked changes, response to reviewers, point-by-point.
   Not for self-review of manuscript quality (use eco-agent:ecology-review).
-tools: Read, Write, Edit, Bash, Glob, Grep, mcp__word-document-server__get_all_comments, mcp__word-document-server__get_comments_by_author, mcp__word-document-server__get_comments_for_paragraph, mcp__word-document-server__get_document_text, mcp__word-document-server__get_document_outline, mcp__word-document-server__get_paragraph_text_from_document, mcp__word-document-server__find_text_in_document, mcp__word-document-server__search_and_replace, mcp__word-document-server__get_document_xml
+tools: Read, Write, Edit, Bash, Glob, Grep, mcp__word-document-server__get_all_comments, mcp__word-document-server__get_comments_by_author, mcp__word-document-server__get_comments_for_paragraph, mcp__word-document-server__get_document_text, mcp__word-document-server__get_document_outline, mcp__word-document-server__get_paragraph_text_from_document, mcp__word-document-server__find_text_in_document, mcp__word-document-server__search_and_replace, mcp__word-document-server__get_document_xml, mcp__word-mcp-live__edit_text, mcp__word-mcp-live__insert_text, mcp__word-mcp-live__delete_text, mcp__word-mcp-live__replace_text, mcp__word-mcp-live__add_comment, mcp__word-mcp-live__reply_to_comment, mcp__word-mcp-live__resolve_comment, mcp__word-mcp-live__delete_comment
 model: opus
 ---
 

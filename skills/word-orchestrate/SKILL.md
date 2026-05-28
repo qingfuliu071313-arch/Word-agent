@@ -10,7 +10,7 @@ description: >-
   "full preparation", "全流程".
 allowed-tools: Read Bash Glob Grep mcp__word-document-server__get_document_info mcp__word-document-server__get_document_outline mcp__word-document-server__list_available_documents
 metadata:
-    version: "0.1.0"
+    version: "1.0.0"
     category: coordination
     downstream-skills: [word-read, word-format, word-edit, word-reference, word-table-figure, word-review, word-check, word-submit]
 ---
@@ -94,6 +94,20 @@ Before routing to any module:
    - Medium (5-20 changes) → show plan, ask confirmation
    - Large (20+ changes) → show plan with estimated scope, ask confirmation
 
+5. **Editing mode detection** — Is Word open with the target document?
+   - Check via `mcp__word-mcp-live__get_active_document()` (if word-mcp-live available)
+   - **Word open with target doc** → set mode = "live"
+     - Inform downstream: use word-mcp-live for all write operations
+     - Font normalization will be deferred (file locked by Word)
+     - Undo support available via word-mcp-live
+     - Do NOT use word-document-server write tools on the same file
+   - **Word not open** → set mode = "file" (default)
+     - Use standard tool routing (word-document-server primary)
+     - Font normalization runs immediately after operations
+   - **word-mcp-live unavailable** → set mode = "file" (no detection possible)
+   
+   See `references/live_editing.md` for platform support and mode rules.
+
 ## Phase 3: Execution
 
 ### Single Module
@@ -120,6 +134,8 @@ Execute modules in order:
 
 **Before returning ANY modified document to the user, the orchestrator MUST run font normalization.** This is a non-negotiable final step that applies to ALL document-modifying pipelines (word-format, word-edit, word-table-figure, word-reference, word-review). It is NOT optional, NOT advisory, and MUST NOT be skipped.
 
+#### File Mode (default)
+
 ```bash
 python3 scripts/normalize_fonts.py "{file_path}" --unify --cn "{cn_font}" --en "{en_font}"
 ```
@@ -131,13 +147,25 @@ If the user provided custom font requirements (e.g., "正文用楷体"), use tho
 python3 scripts/normalize_fonts.py "{file_path}" --unify --cn 楷体 --en "Times New Roman"
 ```
 
+#### Live Mode (Word is open)
+
+```bash
+python3 scripts/normalize_fonts.py "{file_path}" --check-lock --unify --cn "{cn_font}" --en "{en_font}"
+```
+
+- If exit code 0: normalization succeeded (file was unlocked momentarily)
+- If exit code 2: file is locked by Word → **defer normalization**
+  - Warn user: "字体归一化已延迟——Word 正在使用此文件。请关闭 Word 后运行，或在下次操作时自动执行。"
+  - Track as pending: `pending_normalization = true` for this file path
+  - On next interaction with same file: check lock again and run if possible
+
 This gate fixes:
 - Theme font references in styles.xml (the #1 cause of font chaos)
 - Bare runs with no font attributes (inherit wrong fonts from theme)
 - Missing eastAsia attributes from MCP tool writes
 - Mixed fonts within paragraphs from multiple write operations
 
-**Do NOT report this step to the user unless issues were found.** It should be invisible when everything is already correct.
+**Do NOT report this step to the user unless issues were found** (file mode) **or normalization was deferred** (live mode).
 
 ### Follow-up
 

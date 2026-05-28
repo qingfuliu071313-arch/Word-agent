@@ -73,6 +73,26 @@ format_text(paragraph=23, font="宋体")  # 1 次调用
 
 注：Document Map 方式 = Level 0-2 读取 + 按需 Level 3 精读目标段落。
 
+## 6. 多后端写入失效规则
+
+word-agent 使用多个后端（word-document-server、word-mcp-live、docx-mcp、adeu），所有后端写入同一 .docx 文件。
+
+**关键规则：任何后端的任何写操作后，缓存的 Document Map 标记为 stale。**
+
+- 下游模块如需最新结构信息，必须通过 word-reader 重新生成 Document Map
+- 不同后端的读取结果在时序上可能不一致（如 word-mcp-live 实时模式 vs word-document-server 文件模式）
+- 以 word-document-server 的读取为权威来源解决分歧
+
+**adeu 批量编辑的 Token 优势：**
+
+| 编辑方式 | 10 处修改 Token 消耗 | 30 处修改 Token 消耗 |
+|----------|---------------------|---------------------|
+| 逐条 MCP 调用 | ~2000-3000 | ~6000-9000 |
+| adeu Markdown 批量 | ~800-1200 | ~1500-2500 |
+| XML unpack/edit/pack | ~3000+ | ~5000+ |
+
+当修改处数 ≥ 10 时，adeu 路径的 Token 效率优势显著。
+
 ## 反模式（应避免）
 
 | 反模式 | 问题 | 正确做法 |
@@ -82,3 +102,5 @@ format_text(paragraph=23, font="宋体")  # 1 次调用
 | 逐段落检查格式 | 调用次数爆炸 | 用 docx2python 一次提取 |
 | 用 get_document_text 搜索关键词 | 全文加载 | 用 find_text_in_document |
 | 修改一个字走 XML unpack/pack | 大材小用 | 用 search_and_replace |
+| 10+ 处修改逐条 MCP 调用 | Token 浪费 | 用 adeu 批量编辑 |
+| 写入后不标记 Map 失效 | 后续模块读到旧数据 | 任何写入后标记 stale |

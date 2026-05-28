@@ -7,9 +7,9 @@ description: >-
   and severity levels without modifying the document.
   Triggers: 检查引用, 交叉引用, 检查格式, 格式验证, 核对, 是否符合要求,
   check references, cross-reference, verify format, compliance.
-allowed-tools: Read Bash Glob Grep mcp__word-document-server__get_document_text mcp__word-document-server__get_document_outline mcp__word-document-server__find_text_in_document mcp__word-document-server__get_document_info mcp__word-document-server__validate_document_footnotes mcp__word-document-server__get_all_comments mcp__word-document-server__get_paragraph_text_from_document mcp__word-document-server__get_document_xml
+allowed-tools: Read Bash Glob Grep mcp__word-document-server__get_document_text mcp__word-document-server__get_document_outline mcp__word-document-server__find_text_in_document mcp__word-document-server__get_document_info mcp__word-document-server__validate_document_footnotes mcp__word-document-server__get_all_comments mcp__word-document-server__get_paragraph_text_from_document mcp__word-document-server__get_document_xml mcp__docx-mcp__validate_paraids mcp__docx-mcp__audit_document mcp__word-mcp-live__diagnose_layout
 metadata:
-    version: "0.1.0"
+    version: "1.0.0"
     category: verification
     upstream-skills: [word-read, word-format, word-edit]
     downstream-skills: [word-format, word-submit]
@@ -42,10 +42,13 @@ IF user mentions "交叉引用/cross-reference/检查引用/检查图表"
 ELIF user mentions "格式/format/compliance/是否符合要求/检查格式"
   → Format Compliance Mode (Mode B)
 
-ELIF user mentions "全面检查/full check/检查一下"
-  → Both Modes (A + B)
+ELIF user mentions "结构/structural/paraId/bookmarks/文档结构"
+  → Structural Validation Mode (Mode C)
 
-DEFAULT → Both Modes
+ELIF user mentions "全面检查/full check/检查一下"
+  → All Modes (A + B + C)
+
+DEFAULT → Both Modes (A + B)
 ```
 
 ---
@@ -247,13 +250,127 @@ Special Rules:
 
 ---
 
-## Combined Mode (A + B)
+## Mode C: Structural Validation
 
-When both modes are requested:
+### Prerequisites
+- docx-mcp server available (if unavailable, skip with warning)
+
+### Step 1: Paragraph ID Validation
+
+```
+Call: mcp__docx-mcp__validate_paraids(file_path)
+Check:
+  - Zero duplicate paraIds
+  - Zero missing paraIds
+  - All paraIds are valid 8-digit hex format
+```
+
+### Step 2: Comprehensive Structural Audit
+
+```
+Call: mcp__docx-mcp__audit_document(file_path)
+Check:
+  - No broken bookmarks (bookmarkStart without matching bookmarkEnd)
+  - No orphan image references (blip pointing to missing rId)
+  - No invalid numbering definitions (numId referencing non-existent abstractNum)
+  - No style conflicts (duplicate styleId)
+  - No broken hyperlinks
+  - No missing content types
+  - No relationship mismatches
+```
+
+### Step 3: Compile Report
+
+```markdown
+## Structural Validation Report: {filename}
+
+### Paragraph IDs
+- Total paragraphs: {n}
+- ✅/❌ Uniqueness: {details}
+- ✅/❌ Format: {details}
+
+### Document Integrity
+- ✅/❌ Bookmarks: {n} checked, {n} broken
+- ✅/❌ Image references: {n} checked, {n} orphaned
+- ✅/❌ Numbering definitions: {n} checked, {n} invalid
+- ✅/❌ Style definitions: {n} checked, {n} conflicts
+- ✅/❌ Hyperlinks: {n} checked, {n} broken
+
+### Summary
+- Errors: {n}
+- Warnings: {n}
+```
+
+### Fallback (docx-mcp unavailable)
+
+```
+⚠ docx-mcp 不可用，跳过结构验证（paraId、书签、图片引用完整性）。
+  建议安装 docx-mcp 后重新运行检查。
+```
+
+Basic paraId duplicate scan via XML is available as minimal fallback. See `../../references/structural_validation.md`.
+
+---
+
+## Mode D: Layout Diagnostics (Live Mode Only)
+
+### Prerequisites
+- Word must be open with the target document (live editing mode)
+- word-mcp-live must be available
+
+### Trigger
+```
+"布局检查/layout check/排版诊断/页面溢出/orphan lines"
+```
+
+### Step 1: Diagnose Layout
+
+```
+Call: mcp__word-mcp-live__diagnose_layout(file_path)
+Returns:
+  - Actual page count vs expected
+  - Orphan/widow line locations
+  - Text overflow areas
+  - Unexpected page breaks
+  - Heading/paragraph spacing anomalies
+```
+
+### Step 2: Compile Report
+
+```markdown
+## Layout Diagnostics Report: {filename}
+
+### Page Analysis
+- Total pages: {actual} (expected: {expected})
+- Unexpected page breaks: {list}
+
+### Typography Issues
+- Orphan lines: {count} (locations: P{n}, P{m}, ...)
+- Widow lines: {count} (locations: P{n}, P{m}, ...)
+- Text overflow: {count} areas
+
+### Recommendations
+- {specific suggestions based on findings}
+```
+
+### Fallback (Not in Live Mode)
+
+```
+⚠ 布局诊断仅在 Word 打开文档时可用（需要 Word 的排版引擎）。
+  请在 Word 中打开文档后重新运行此检查。
+```
+
+---
+
+## Combined Mode (A + B + C)
+
+When all modes are requested (or "全面检查"):
 1. Run Mode A (cross-reference) first
 2. Run Mode B (format compliance)
-3. Merge into a single combined report
-4. Provide overall recommendation
+3. Run Mode C (structural validation) — skipped with warning if docx-mcp unavailable
+4. Run Mode D (layout diagnostics) — only if live mode available, otherwise skipped silently
+5. Merge into a single combined report
+6. Provide overall recommendation
 
 ---
 
@@ -273,4 +390,5 @@ Based on results, suggest next steps:
 - `../../references/cross_ref_rules.md` — Cross-reference check rule definitions
 - `../../references/format_spec_parser.md` — Format Spec structure
 - `../../references/academic_formatting.md` — Academic formatting knowledge
+- `../../references/structural_validation.md` — OOXML structural integrity rules (Mode C)
 - `../../references/token_budget.md` — Token efficiency rules

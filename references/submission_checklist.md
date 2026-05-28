@@ -13,9 +13,13 @@
 | # | 检查项 | 检查方法 | 通过标准 |
 |---|--------|---------|---------|
 | A1 | 无未接受的修订 | 扫描 XML 中的 `<w:ins>` / `<w:del>` | 零个修订标记 |
+| A1.5 | 修订已审查 | `get_tracked_changes` 列出所有修订 → 用户确认接受/拒绝 | 所有修订已处理（接受或拒绝） |
 | A2 | 无批注 | `get_all_comments` 返回空 | 零条批注 |
 | A3 | 无个人元数据 | 读取 `docProps/core.xml` | creator/lastModifiedBy 为空 |
 | A4 | 文件大小合理 | 检查文件大小 | < 期刊限制（通常 10-50MB） |
+| A5 | 段落 ID 唯一 | `mcp__docx-mcp__validate_paraids` | 零重复、零缺失 |
+| A6 | 书签完整 | `mcp__docx-mcp__audit_document` | 零断裂书签 |
+| A7 | 图片引用完整 | `mcp__docx-mcp__audit_document` | 零孤立图片引用 |
 
 ### 交叉引用完整性
 

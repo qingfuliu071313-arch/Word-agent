@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 ## What This Is
 
-word-agent is a **Claude Code plugin** (v0.1.0) for academic paper Word document operations. It provides 9 specialized agents covering the full manuscript lifecycle: document analysis, formatting, content editing, reference management, table/figure formatting, review handling, quality checking, and submission preparation.
+word-agent is a **Claude Code plugin** (v1.0.0) for academic paper Word document operations. It provides 9 specialized agents covering the full manuscript lifecycle: document analysis, formatting, content editing, reference management, table/figure formatting, review handling, quality checking, and submission preparation.
 
 **Target users:** Researchers who write and edit academic papers in Microsoft Word, with bilingual (EN/中文) support.
 
@@ -57,11 +57,11 @@ scripts/                 Setup scripts and Python dependencies
 
 ## External Dependencies
 
-- **Python:** docx2python, deepdiff, redlines (P0); python-docx-replace (P2); docxcompose, citeproc-py (P3)
-- **MCP Servers:** word-document-server (required), Zotero (optional), Semantic Scholar (optional)
+- **Python:** docx2python, deepdiff, redlines (P0); word-mcp-live, docx-mcp-server, adeu (P0-ext); python-docx-replace (P2); docxcompose, citeproc-py (P3)
+- **MCP Servers:** word-document-server (required), word-mcp-live (recommended), docx-mcp (recommended), Zotero (optional), Semantic Scholar (optional)
 - **Existing Skills:** docx skill (XML operations layer)
 
-See `scripts/requirements.txt` for pip install commands.
+See `scripts/requirements.txt` for pip install commands and `references/mcp_servers.md` for server configuration.
 
 ## Development Workflow
 

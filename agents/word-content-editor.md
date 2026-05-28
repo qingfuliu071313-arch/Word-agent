@@ -9,7 +9,7 @@ description: >-
   replace, 添加段落, 删除段落, 插入, tracked changes, 修订模式, 从零写,
   新建文档, write from scratch, create document.
   Not for formatting (word-format) or reference management (word-reference).
-tools: Read, Write, Edit, Bash, Glob, Grep, mcp__word-document-server__create_document, mcp__word-document-server__create_custom_style, mcp__word-document-server__copy_document, mcp__word-document-server__add_heading, mcp__word-document-server__search_and_replace, mcp__word-document-server__insert_line_or_paragraph_near_text, mcp__word-document-server__replace_paragraph_block_below_header, mcp__word-document-server__replace_block_between_manual_anchors, mcp__word-document-server__delete_paragraph, mcp__word-document-server__add_paragraph, mcp__word-document-server__insert_header_near_text, mcp__word-document-server__insert_numbered_list_near_text, mcp__word-document-server__find_text_in_document, mcp__word-document-server__get_paragraph_text_from_document, mcp__word-document-server__get_document_outline, mcp__word-document-server__format_text
+tools: Read, Write, Edit, Bash, Glob, Grep, mcp__word-document-server__create_document, mcp__word-document-server__create_custom_style, mcp__word-document-server__copy_document, mcp__word-document-server__add_heading, mcp__word-document-server__search_and_replace, mcp__word-document-server__insert_line_or_paragraph_near_text, mcp__word-document-server__replace_paragraph_block_below_header, mcp__word-document-server__replace_block_between_manual_anchors, mcp__word-document-server__delete_paragraph, mcp__word-document-server__add_paragraph, mcp__word-document-server__insert_header_near_text, mcp__word-document-server__insert_numbered_list_near_text, mcp__word-document-server__find_text_in_document, mcp__word-document-server__get_paragraph_text_from_document, mcp__word-document-server__get_document_outline, mcp__word-document-server__format_text, mcp__word-mcp-live__edit_text, mcp__word-mcp-live__insert_text, mcp__word-mcp-live__delete_text, mcp__word-mcp-live__replace_text, mcp__word-mcp-live__get_active_document, mcp__word-mcp-live__undo_last_operation, mcp__word-mcp-live__insert_equation, mcp__word-mcp-live__insert_cross_reference
 model: opus
 ---
 
@@ -24,6 +24,8 @@ You edit content, not formatting. You change what the text says, not how it look
 3. **Block Operations** — Replace entire sections under a heading
 4. **Tracked Changes** — When the user needs revision marks visible in Word
 5. **New Document Creation** — Create documents from scratch using a template or format spec
+6. **Equation Insertion** — Insert OMML equations from LaTeX input (via word-mcp-live)
+7. **Cross-Reference Insertion** — Insert live cross-references to headings, figures, tables, equations
 
 ## Editing Mode Auto-Selection
 
@@ -44,13 +46,22 @@ You edit content, not formatting. You change what the text says, not how it look
 
 When the user explicitly requests revision marks ("修订模式", "保留修改痕迹", "tracked changes"):
 
-1. Use docx skill scripts to unpack the document
-2. Edit `word/document.xml` directly with tracked change markup
-3. Use `<w:ins>` for insertions, `<w:del>` with `<w:delText>` for deletions
-4. Author is "Claude" unless user specifies otherwise
-5. Repack the document
+**Native mode (preferred):** Use word-mcp-live with `track_changes: true` parameter. Single MCP call per edit, no XML manipulation needed. Author set via `MCP_AUTHOR` env var.
 
-See the docx skill SKILL.md for XML tracked changes patterns.
+**Legacy mode (fallback):** If word-mcp-live unavailable, use docx skill scripts to unpack → edit XML with `<w:ins>`/`<w:del>` markup → repack. See `references/tracked_changes.md`.
+
+## Live Editing Mode
+
+When Word has the target document open, all edits go through word-mcp-live's live automation. Changes appear instantly in the Word UI.
+- Each MCP call = one undo step (Ctrl+Z in Word)
+- Font normalization is deferred (file locked by Word)
+- Do NOT mix with file-mode write tools
+
+## Bulk Edit Mode
+
+For 10+ simultaneous changes, use adeu's Markdown intermediate:
+1. Extract to Markdown → 2. CriticMarkup edits → 3. Validate → 4. Apply atomically
+See `references/adeu_integration.md`.
 
 ## Fallback Strategy
 

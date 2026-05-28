@@ -7,9 +7,9 @@ description: >-
   response documents.
   Triggers: 审稿意见, 修订, 审阅, 批注, reviewer comments, revision,
   response to reviewers, point-by-point.
-allowed-tools: Read Write Edit Bash Glob Grep mcp__word-document-server__get_all_comments mcp__word-document-server__get_comments_by_author mcp__word-document-server__get_comments_for_paragraph mcp__word-document-server__get_document_text mcp__word-document-server__get_document_outline mcp__word-document-server__get_paragraph_text_from_document mcp__word-document-server__find_text_in_document mcp__word-document-server__search_and_replace mcp__word-document-server__get_document_xml
+allowed-tools: Read Write Edit Bash Glob Grep mcp__word-document-server__get_all_comments mcp__word-document-server__get_comments_by_author mcp__word-document-server__get_comments_for_paragraph mcp__word-document-server__get_document_text mcp__word-document-server__get_document_outline mcp__word-document-server__get_paragraph_text_from_document mcp__word-document-server__find_text_in_document mcp__word-document-server__search_and_replace mcp__word-document-server__get_document_xml mcp__word-mcp-live__edit_text mcp__word-mcp-live__insert_text mcp__word-mcp-live__delete_text mcp__word-mcp-live__replace_text mcp__word-mcp-live__add_comment mcp__word-mcp-live__reply_to_comment mcp__word-mcp-live__resolve_comment mcp__word-mcp-live__delete_comment
 metadata:
-    version: "0.1.0"
+    version: "1.0.0"
     category: review
     upstream-skills: [word-read]
     downstream-skills: [word-edit, word-format, word-reference, word-table-figure, word-check, word-submit]
@@ -97,34 +97,108 @@ For each comment, propose a strategy:
 
 After user confirms the strategy:
 
-### Step 1: Enable Tracked Changes
+### Step 1: Execute Changes with Native Tracked Changes (Preferred)
 
-All document modifications in this phase use tracked changes mode (XML manipulation):
+Uses word-mcp-live with `track_changes: true`. Process changes in document order (top to bottom) to avoid position shifts.
+
+For each accepted/partially accepted comment:
+
+```
+1. Locate target text:
+   → Use Document Map or find_text_in_document(file_path, target_text)
+
+2. Apply change with native tracked changes:
+   - For text replacement:
+     mcp__word-mcp-live__replace_text(file_path, old_text, new_text, track_changes=true)
+   - For new paragraph insertion:
+     mcp__word-mcp-live__insert_text(file_path, anchor_text, new_text, position="after", track_changes=true)
+   - For text deletion:
+     mcp__word-mcp-live__delete_text(file_path, target_text, track_changes=true)
+   - For paragraph rewrite:
+     mcp__word-mcp-live__edit_text(file_path, old_text, new_text, track_changes=true)
+
+3. Author is set via MCP_AUTHOR env var (default: "Claude")
+```
+
+### Step 1 (Legacy Fallback): XML Tracked Changes
+
+If word-mcp-live is unavailable, fall back to XML manipulation:
 
 ```bash
 # Unpack document for tracked changes editing
 python scripts/office/unpack.py document.docx unpacked/
 ```
 
-### Step 2: Execute Each Change
-
-Process changes in document order (top to bottom) to avoid position shifts:
-
 For each accepted/partially accepted comment:
 1. Locate the target text in `unpacked/word/document.xml`
 2. Apply the change with `<w:ins>` / `<w:del>` markup
 3. Set author="Claude", date=current timestamp
 
-### Step 3: Repack
-
 ```bash
 python scripts/office/pack.py unpacked/ revised_document.docx --original document.docx
 ```
 
-### Step 4: Verify
+See `../../references/tracked_changes.md` for XML patterns and native mode parameter reference.
+
+### Alternative: Bulk Edit via adeu (10+ revisions)
+
+When Phase 2 produces 10 or more ACCEPT/PARTIAL revision items, consider using adeu for batch processing instead of individual MCP calls:
+
+```
+1. Extract document to Markdown via adeu
+2. Generate CriticMarkup for all accepted changes:
+   {~~old text~>new text~~} for replacements
+   {++new paragraph text++} for insertions
+   {--deleted text--} for deletions
+3. Validate all changes atomically (adeu catches ambiguous matches)
+4. Apply all changes in one pass with tracked changes
+5. Font normalization gate
+```
+
+**Trigger:** Suggest to user when revision count >= 10: "有 {n} 处修改。建议使用批量模式一次性应用？"
+
+**Fallback:** If adeu is not installed or validation fails, fall back to individual MCP calls.
+
+See `../../references/adeu_integration.md` for pipeline details.
+
+### Step 2: Verify
 
 - Read the revised document to confirm changes applied
 - Suggest opening in Word to review tracked changes
+
+---
+
+## Phase 3.5: Comment-Based Reply Workflow
+
+After executing revisions, reply to in-document comments using word-mcp-live. This creates a threaded conversation visible in Word's comment pane.
+
+### For ACCEPT/PARTIAL comments:
+
+```
+1. (Phase 3 already executed the document change)
+2. Reply to comment:
+   mcp__word-mcp-live__reply_to_comment(file_path, comment_id, reply_text)
+   - ACCEPT:  "已按建议修改。见修订标记。"
+   - PARTIAL: "已部分采纳。[说明替代方案]。见修订标记。"
+3. Resolve comment:
+   mcp__word-mcp-live__resolve_comment(file_path, comment_id)
+```
+
+### For REBUT/DEFER comments:
+
+```
+1. Reply to comment with rationale (do NOT resolve):
+   mcp__word-mcp-live__reply_to_comment(file_path, comment_id, reply_text)
+   - REBUT: "感谢建议。我们认为原文表述更准确，理由如下：[理由]。详见 response to reviewers。"
+   - DEFER: "感谢建议。此问题将在后续研究中解决。详见 response to reviewers。"
+2. Do NOT resolve — leave for user to decide after reviewing
+```
+
+### Fallback
+
+If word-mcp-live is unavailable, skip Phase 3.5. Comment replies will only appear in the point-by-point response document (Phase 4).
+
+See `../../references/comment_operations.md` for the full comment model and operations reference.
 
 ---
 
@@ -196,3 +270,5 @@ Response: Corrected. Thank you for catching this.
 
 - `../../references/tool_routing.md` — Tool selection priority
 - `../../references/token_budget.md` — Token efficiency rules
+- `../../references/tracked_changes.md` — Native vs Legacy tracked changes reference
+- `../../references/comment_operations.md` — Threaded comment model and operations

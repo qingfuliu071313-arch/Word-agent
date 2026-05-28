@@ -441,12 +441,27 @@ def main():
     parser.add_argument('--unify', action='store_true', help='Force ALL runs to the same font pair (aggressive mode for academic papers)')
     parser.add_argument('--textboxes', action='store_true', help='Extract and display text box content')
     parser.add_argument('--json', action='store_true', help='Output results as JSON')
+    parser.add_argument('--check-lock', action='store_true',
+                        help='Check if file is locked (e.g., open in Word) before processing. '
+                             'If locked, print warning and exit with code 2 instead of failing.')
 
     args = parser.parse_args()
 
     if not os.path.exists(args.input):
         print(f"Error: file not found: {args.input}", file=sys.stderr)
         sys.exit(1)
+
+    if args.check_lock:
+        try:
+            with open(args.input, 'r+b'):
+                pass
+        except (PermissionError, OSError):
+            msg = f"Warning: file is locked (likely open in Word): {args.input}"
+            if args.json:
+                print(json.dumps({"status": "locked", "message": msg}))
+            else:
+                print(msg, file=sys.stderr)
+            sys.exit(2)
 
     # Text box extraction
     if args.textboxes:

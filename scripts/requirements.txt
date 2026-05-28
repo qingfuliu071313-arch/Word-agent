@@ -5,9 +5,20 @@ docx2python>=2.0.0
 deepdiff>=6.0
 redlines>=0.4.0
 
+# P0-ext: Multi-backend integration
+word-mcp-live>=1.5.0
+docx-mcp-server>=0.7.0
+adeu>=1.8.0
+
 # P2: Content editing
 python-docx-replace>=0.4.0
 
 # P3: Reference management + Document merging
 docxcompose>=1.4.0
 citeproc-py>=0.6.0
+
+# Dev dependencies (optional)
+# pytest>=7.0
+
+# PII scrubbing (optional, ~560MB)
+# python -m spacy download en_core_web_lg
