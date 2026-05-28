@@ -264,109 +264,71 @@ User requests: "中英文混排", "规范标点", "修复空格", "CJK normaliza
 
 ---
 
-## Phase 4: Font Normalization (Post-Processing Safety Net)
+## Phase 4: Font Normalization (MANDATORY)
 
-### When Triggered
+### This phase ALWAYS runs after Phase 3. It is NOT optional.
 
-This phase runs in two scenarios:
+Every MCP write operation risks introducing font inconsistencies. This phase is the final gate that guarantees the output document has consistent fonts. Skip it and the user gets font chaos.
 
-1. **Explicitly triggered** — User requests: "fix fonts", "修复字体", "字体归一化", "normalize fonts", "统一字体"
-2. **Automatically after Phase 3** — As a safety net after batch formatting execution, to catch any `w:rFonts` inconsistencies introduced by MCP tool calls
+### Why This Is Non-Negotiable
 
-### Why This Is Needed
-
-MCP tools (e.g., `format_text`) often only set the `w:ascii` font attribute, leaving `w:eastAsia` (Chinese characters) to fall back to Word's default theme font. Multiple write operations also create separate `<w:r>` runs with inconsistent `<w:rPr>` formatting. See `../../references/font_normalization.md` for the full technical explanation.
+MCP tools (e.g., `format_text`) only set `w:ascii`, leaving `w:eastAsia` to fall back to theme fonts. Styles.xml uses theme references (`asciiTheme`, `eastAsiaTheme`) that override explicit font names. Bare runs inherit wrong fonts from themes. See `../../references/font_normalization.md` for the full technical explanation.
 
 ### Process
 
-1. **Detect** — Scan the document XML for font inconsistencies:
+1. **Detect** — Run the font normalization script in detect-only mode:
 
 ```bash
-python3 << 'PYEOF'
-import zipfile
-import xml.etree.ElementTree as ET
-import json
-
-ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
-
-def detect_font_issues(file_path):
-    with zipfile.ZipFile(file_path, 'r') as z:
-        xml_content = z.read('word/document.xml')
-    root = ET.fromstring(xml_content)
-    issues = []
-    for i, para in enumerate(root.findall('.//w:p', ns)):
-        fonts_in_para = {'ascii': set(), 'eastAsia': set(), 'hAnsi': set()}
-        missing_eastAsia = False
-        for run in para.findall('.//w:r', ns):
-            rFonts = run.find('.//w:rFonts', ns)
-            if rFonts is not None:
-                ascii_font = rFonts.get(f'{{{ns["w"]}}}ascii')
-                east_font = rFonts.get(f'{{{ns["w"]}}}eastAsia')
-                hansi_font = rFonts.get(f'{{{ns["w"]}}}hAnsi')
-                if ascii_font: fonts_in_para['ascii'].add(ascii_font)
-                if east_font: fonts_in_para['eastAsia'].add(east_font)
-                if hansi_font: fonts_in_para['hAnsi'].add(hansi_font)
-                if ascii_font and not east_font: missing_eastAsia = True
-        texts = para.findall('.//w:t', ns)
-        preview = ''.join(t.text or '' for t in texts)[:60]
-        if not preview.strip(): continue
-        issue = None
-        if len(fonts_in_para['ascii']) > 1:
-            issue = f"Multiple ascii fonts {fonts_in_para['ascii']}"
-        elif len(fonts_in_para['eastAsia']) > 1:
-            issue = f"Multiple eastAsia fonts {fonts_in_para['eastAsia']}"
-        elif missing_eastAsia:
-            issue = f"eastAsia font missing (ascii set but eastAsia not)"
-        if issue:
-            issues.append({"paragraph": i + 1, "issue": issue, "preview": preview})
-    return issues
-
-issues = detect_font_issues("{file_path}")
-print(json.dumps({"count": len(issues), "issues": issues[:20]}, ensure_ascii=False, indent=2))
-PYEOF
+python3 scripts/normalize_fonts.py "{file_path}" --detect-only --json
 ```
+
+This detects ALL font issues including:
+- Runs with missing `w:rFonts` (inherit theme/style fonts)
+- Theme font references (`*Theme` attributes) in styles.xml and document.xml
+- Missing `eastAsia` or `ascii` attributes
+- Mixed fonts within a paragraph
+- `hAnsi`/`ascii` mismatches
 
 2. **Preview** — Show user what was found:
 
 ```
 字体一致性检查：
 发现 {n} 处字体问题：
+- STYLE: styles.xml 中有 {x} 处使用了主题字体引用
 - P12: eastAsia 字体缺失（仅设置了 ascii=Times New Roman）
 - P25: 同一段落中混用多种 ascii 字体 {Arial, Times New Roman}
-- P41: eastAsia 字体缺失
+- P41: 文字 run 缺少字体属性（继承了主题字体）
 ...
 
-将使用配对: 宋体 ↔ Times New Roman, 黑体 ↔ Arial
+将使用配对: 宋体 ↔ Times New Roman
 确认修复？
 ```
 
 If running automatically after Phase 3 and no issues found, skip silently.
 If running automatically after Phase 3 and issues found, report and auto-fix (user already confirmed the formatting plan in Phase 2).
 
-3. **Normalize** — Run the normalization script from `../../references/font_normalization.md`:
+3. **Normalize** — Run the script with `--unify` for academic papers:
 
 ```bash
-python3 << 'PYEOF'
-import zipfile, xml.etree.ElementTree as ET, shutil, os
+# For academic papers (recommended): force ALL runs to same font pair
+python3 scripts/normalize_fonts.py "{file_path}" --unify --cn "{cn_font}" --en "{en_font}"
 
-# --- Full normalize_fonts() function from references/font_normalization.md ---
-
-result = normalize_fonts("{file_path}", cn_font="{cn_font}", en_font="{en_font}")
-print(f"Fixed {result['fixed_count']} font attribute issues.")
-for d in result['details'][:10]:
-    print(f"  - {d}")
-PYEOF
+# For gentle fix: only fill in missing attributes using font pairing table
+python3 scripts/normalize_fonts.py "{file_path}" --cn "{cn_font}" --en "{en_font}"
 ```
+
+The script fixes three layers:
+- **styles.xml**: replaces all theme font references with explicit fonts in docDefaults and style definitions
+- **document.xml existing rFonts**: strips theme attrs, fixes pairings
+- **document.xml bare runs**: injects `w:rPr`/`w:rFonts` into runs that had no font specification
 
 4. **Report** — Show what was fixed:
 
 ```
 字体归一化完成：
-✅ 修复了 {n} 处字体属性问题
-  - 补充 eastAsia 属性: {x} 处
-  - 补充 ascii/hAnsi 属性: {y} 处
-  - 修正 hAnsi 与 ascii 不匹配: {z} 处
+✅ 修复了 {n} 处字体属性
 使用配对: {cn_font} ↔ {en_font}
+验证: 所有字体问题已解决
 ```
 
 ### Custom Font Pairing

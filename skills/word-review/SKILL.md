@@ -182,11 +182,13 @@ Response: Corrected. Thank you for catching this.
 
 ## Post-Execution
 
-1. **Output two files:**
+1. **MANDATORY: Font Normalization** — Run `python3 scripts/normalize_fonts.py "{file_path}" --unify` on all output documents before returning. See `../../references/font_normalization.md`.
+
+2. **Output two files:**
    - `{filename}_revised.docx` — manuscript with tracked changes
    - `response_to_reviewers.docx` — point-by-point response
 
-2. **Suggest next steps:**
+3. **Suggest next steps:**
    - "修订完成。建议运行 word-checker 验证交叉引用和格式。"
    - "确认无误后，使用 word-submit 生成 clean copy 用于重新投稿。"
 

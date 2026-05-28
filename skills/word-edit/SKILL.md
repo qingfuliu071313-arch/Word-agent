@@ -155,12 +155,20 @@ Replacement ("30 days" → "60 days"):
 - Use `<w:delText>` inside `<w:del>`, never `<w:t>`
 - Each `w:id` must be unique across the document
 
-## Phase 4: Verify
+## Phase 4: Verify & Font Normalization
 
 After executing edits:
 1. Read the modified section to confirm changes applied correctly
 2. If tracked changes mode, suggest user open in Word to review
 3. Suggest running word-checker if the edit affected figures/tables/references
+
+### MANDATORY: Font Normalization
+
+**Before returning the document to the user, ALWAYS run:**
+```bash
+python3 scripts/normalize_fonts.py "{file_path}" --unify
+```
+This fixes theme font references, bare runs, and missing eastAsia attributes introduced by MCP operations. This step is non-optional — see `../../references/font_normalization.md`.
 
 ### New Document Mode
 

@@ -66,18 +66,18 @@ Before routing to any module:
    - YES → run .doc→.docx conversion pipeline:
      ```
      a. Verify LibreOffice available: `which soffice`
-        - Not found → tell user: "需要 LibreOffice 来转换 .doc 文件。请安装 LibreOffice，或手动用 Word 打开 .doc 并另存为 .docx。"
+        - Not found → tell user: "需要 LibreOffice 来转换 .doc 文件。请安装后重试。"
      b. Convert: `soffice --headless --convert-to docx --outdir "{dir}" "{file.doc}"`
         - If same-name .docx exists → save as `{name}-converted.docx`
-     c. Post-fix LibreOffice artifacts (MANDATORY):
-        - compatibilityMode 11 → 15
-        - Liberation Serif → Times New Roman, Liberation Sans → Arial
-        - 宋体;SimSun → 宋体, 黑体;SimHei → 黑体, 新宋体 → 宋体
-        - Heading1 basedOn TOC1 → basedOn Normal
+     c. Post-fix ALL conversion artifacts (MANDATORY):
+        python3 scripts/fix_libreoffice.py "{converted.docx}"
+        This single command fixes: compatibilityMode, Liberation fonts,
+        semicolon fallback fonts, style chain, tables, spacing, page setup,
+        AND runs normalize_fonts.py --unify automatically.
      d. Report to user: "已将 {name}.doc 转换为 .docx 并修复格式兼容性问题。后续操作基于转换后的文件。"
      e. Update file_path to point to the new .docx
      ```
-     See `references/doc_conversion.md` for complete conversion code.
+     See `references/doc_conversion.md` for details.
    - NO (already .docx) → continue
 
 2. **Document Map check** — Does a Document Map exist in the conversation context?
@@ -89,12 +89,7 @@ Before routing to any module:
    - NO format requirements yet → ask user: "请提供格式要求文档（Word/PDF/文字描述均可）"
    - If format requirements are a Word document → remind downstream modules to extract text box content (format templates often place formatting instructions inside text boxes, which standard text extraction tools skip entirely)
 
-4. **Font normalization advisory** — If the document was created or heavily edited by CLI tools / MCP operations without Word Agent guidance, it may have inconsistent `w:rFonts` attributes (e.g., `w:eastAsia` missing, mixed fonts within paragraphs). In this case:
-   - Advise the user: "此文档可能存在字体不一致问题（MCP 工具操作可能未正确设置中文字体属性）。建议在格式化流程中包含字体归一化步骤。"
-   - If routing to word-format, ensure font normalization runs as part of post-processing (Phase 4 in word-format SKILL.md)
-   - See `references/font_normalization.md` for technical details
-
-5. **Token budget assessment** — Estimate operation scale:
+4. **Token budget assessment** — Estimate operation scale:
    - Small (< 5 changes) → proceed directly
    - Medium (5-20 changes) → show plan, ask confirmation
    - Large (20+ changes) → show plan with estimated scope, ask confirmation
@@ -120,6 +115,31 @@ Execute modules in order:
 - If not recoverable → report to user with explanation
 
 ## Phase 4: Post-Execution
+
+### MANDATORY: Font Normalization Gate
+
+**Before returning ANY modified document to the user, the orchestrator MUST run font normalization.** This is a non-negotiable final step that applies to ALL document-modifying pipelines (word-format, word-edit, word-table-figure, word-reference, word-review). It is NOT optional, NOT advisory, and MUST NOT be skipped.
+
+```bash
+python3 scripts/normalize_fonts.py "{file_path}" --unify --cn "{cn_font}" --en "{en_font}"
+```
+
+Default fonts: `--cn 宋体 --en "Times New Roman"` unless the user specified otherwise.
+
+If the user provided custom font requirements (e.g., "正文用楷体"), use those instead:
+```bash
+python3 scripts/normalize_fonts.py "{file_path}" --unify --cn 楷体 --en "Times New Roman"
+```
+
+This gate fixes:
+- Theme font references in styles.xml (the #1 cause of font chaos)
+- Bare runs with no font attributes (inherit wrong fonts from theme)
+- Missing eastAsia attributes from MCP tool writes
+- Mixed fonts within paragraphs from multiple write operations
+
+**Do NOT report this step to the user unless issues were found.** It should be invisible when everything is already correct.
+
+### Follow-up
 
 1. **Suggest next step** — Based on workflow table in `docs/CLAUDE.md`
 2. **Report Token usage** — If the operation was large, note what was saved by caching

@@ -185,6 +185,8 @@ Step 3: Manual check reminders
 
 ## Post-Execution
 
+**MANDATORY: Font Normalization** — Run `python3 scripts/normalize_fonts.py "{file_path}" --unify` on all output documents before returning. See `../../references/font_normalization.md`.
+
 Report final status:
 
 ```

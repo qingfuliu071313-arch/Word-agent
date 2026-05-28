@@ -140,8 +140,9 @@ Before creating a new table/figure:
 ## Post-Execution
 
 After creating or modifying tables/figures:
-1. Report what was done
-2. Suggest running word-checker to verify cross-references still valid
+1. **MANDATORY: Font Normalization** — Run `python3 scripts/normalize_fonts.py "{file_path}" --unify` before returning the document. See `../../references/font_normalization.md`.
+2. Report what was done
+3. Suggest running word-checker to verify cross-references still valid
 
 ## Shared Resources
 

@@ -166,9 +166,10 @@ Convert the entire reference list from one citation style to another:
 ## Post-Execution
 
 After any reference operation:
-1. Report changes made
-2. Suggest running word-checker to verify citation consistency
-3. If reference format changed, remind to check in-text citation format matches
+1. **MANDATORY: Font Normalization** — Run `python3 scripts/normalize_fonts.py "{file_path}" --unify` before returning the document. See `../../references/font_normalization.md`.
+2. Report changes made
+3. Suggest running word-checker to verify citation consistency
+4. If reference format changed, remind to check in-text citation format matches
 
 ## Shared Resources
 

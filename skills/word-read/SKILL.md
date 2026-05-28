@@ -172,54 +172,23 @@ Use `get_paragraph_text_from_document` for targeted reads.
 
 ### Step 5.5: Font Consistency Check
 
-Scan the document XML for font inconsistencies — multiple fonts within the same paragraph's runs, or missing `w:eastAsia` attributes. This is especially common in documents created/edited by MCP tools directly.
+Scan the document for font inconsistencies using the font normalization script. This detects missing `w:eastAsia` attributes, theme font references in styles.xml, bare runs without any font specification, and mixed fonts within paragraphs.
 
 ```bash
-python3 << 'PYEOF'
-import zipfile
-import xml.etree.ElementTree as ET
-import json
-
-ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
-
-def detect_font_issues(file_path):
-    with zipfile.ZipFile(file_path, 'r') as z:
-        xml_content = z.read('word/document.xml')
-    root = ET.fromstring(xml_content)
-    issues = []
-    for i, para in enumerate(root.findall('.//w:p', ns)):
-        fonts_in_para = {'ascii': set(), 'eastAsia': set(), 'hAnsi': set()}
-        missing_eastAsia = False
-        for run in para.findall('.//w:r', ns):
-            rFonts = run.find('.//w:rFonts', ns)
-            if rFonts is not None:
-                a = rFonts.get(f'{{{ns["w"]}}}ascii')
-                e = rFonts.get(f'{{{ns["w"]}}}eastAsia')
-                h = rFonts.get(f'{{{ns["w"]}}}hAnsi')
-                if a: fonts_in_para['ascii'].add(a)
-                if e: fonts_in_para['eastAsia'].add(e)
-                if h: fonts_in_para['hAnsi'].add(h)
-                if a and not e: missing_eastAsia = True
-        texts = para.findall('.//w:t', ns)
-        preview = ''.join(t.text or '' for t in texts)[:60]
-        if not preview.strip(): continue
-        issue = None
-        if len(fonts_in_para['ascii']) > 1:
-            issue = f"Multiple ascii fonts {fonts_in_para['ascii']}"
-        elif len(fonts_in_para['eastAsia']) > 1:
-            issue = f"Multiple eastAsia fonts {fonts_in_para['eastAsia']}"
-        elif missing_eastAsia:
-            issue = f"eastAsia font missing (ascii set but eastAsia not)"
-        if issue:
-            issues.append({"paragraph": i + 1, "issue": issue, "preview": preview})
-    return issues
-
-issues = detect_font_issues("{file_path}")
-print(json.dumps({"count": len(issues), "issues": issues[:20]}, ensure_ascii=False, indent=2))
-PYEOF
+python3 scripts/normalize_fonts.py "{file_path}" --detect-only --json
 ```
 
-Include any detected font issues in the "Format Issues Detected" section of the Document Map. If many paragraphs have missing `eastAsia` attributes, add a summary note recommending font normalization via word-format.
+The script checks three layers:
+- **styles.xml**: theme font references (`*Theme` attributes) in docDefaults and style definitions
+- **document.xml runs with rFonts**: missing eastAsia/ascii, mixed fonts, hAnsi mismatches
+- **document.xml bare runs**: text runs with no `w:rPr` or no `w:rFonts` that silently inherit theme fonts
+
+Include any detected font issues in the "Format Issues Detected" section of the Document Map. If issues are found, add a summary note recommending font normalization via word-format:
+
+```
+⚠ Font issues: {n} problems detected (theme refs, missing eastAsia, bare runs)
+  → Recommend: python3 scripts/normalize_fonts.py "{file_path}" --unify
+```
 
 See `../../references/font_normalization.md` for technical background.
 
