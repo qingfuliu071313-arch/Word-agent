@@ -53,6 +53,7 @@ scripts/                 Setup scripts and Python dependencies
 2. **MCP First, XML Fallback** — Use Word MCP Server tools for direct operations; only fall back to XML unpack/edit/pack for tracked changes
 3. **User-Provided Format Specs** — No pre-built journal templates; parse the user's format requirement document into executable rules
 4. **Token Budget Enforcement** — Lazy loading, batched operations, tool priority routing
+5. **MANDATORY Skill Routing** — When this plugin is active, ALL Word document operations MUST go through word-agent skills, NEVER through raw MCP tool calls. Direct MCP calls bypass font pairing, style-first workflow, and font normalization, causing Chinese font chaos. See `docs/CLAUDE.md` "MANDATORY" section for details.
 
 ## External Dependencies
 

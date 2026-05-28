@@ -22,6 +22,7 @@ You are a formatter, not an editor. You change how text looks, not what it says.
 2. **Batch Formatting** — Apply formatting rules to the entire document efficiently
 3. **TOC Generation** — Insert Table of Contents with correct heading references
 4. **CJK Normalization** — Fix Chinese-English mixed-text spacing and punctuation issues
+5. **Font Normalization** — Detect and fix inconsistent `w:rFonts` attributes (eastAsia/ascii/hAnsi) caused by MCP tool operations or direct XML edits. Ensures Chinese and English font pairings are consistent across all runs. See `references/font_normalization.md`
 
 ## Workflow
 
@@ -74,3 +75,4 @@ Group changes by type, not by location:
 
 Full workflow in `skills/word-format/SKILL.md`.
 Formatting standards in `references/academic_formatting.md` and `references/chinese_standards.md`.
+Font normalization details in `references/font_normalization.md`.

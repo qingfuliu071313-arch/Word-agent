@@ -264,6 +264,120 @@ User requests: "中英文混排", "规范标点", "修复空格", "CJK normaliza
 
 ---
 
+## Phase 4: Font Normalization (Post-Processing Safety Net)
+
+### When Triggered
+
+This phase runs in two scenarios:
+
+1. **Explicitly triggered** — User requests: "fix fonts", "修复字体", "字体归一化", "normalize fonts", "统一字体"
+2. **Automatically after Phase 3** — As a safety net after batch formatting execution, to catch any `w:rFonts` inconsistencies introduced by MCP tool calls
+
+### Why This Is Needed
+
+MCP tools (e.g., `format_text`) often only set the `w:ascii` font attribute, leaving `w:eastAsia` (Chinese characters) to fall back to Word's default theme font. Multiple write operations also create separate `<w:r>` runs with inconsistent `<w:rPr>` formatting. See `../../references/font_normalization.md` for the full technical explanation.
+
+### Process
+
+1. **Detect** — Scan the document XML for font inconsistencies:
+
+```bash
+python3 << 'PYEOF'
+import zipfile
+import xml.etree.ElementTree as ET
+import json
+
+ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+
+def detect_font_issues(file_path):
+    with zipfile.ZipFile(file_path, 'r') as z:
+        xml_content = z.read('word/document.xml')
+    root = ET.fromstring(xml_content)
+    issues = []
+    for i, para in enumerate(root.findall('.//w:p', ns)):
+        fonts_in_para = {'ascii': set(), 'eastAsia': set(), 'hAnsi': set()}
+        missing_eastAsia = False
+        for run in para.findall('.//w:r', ns):
+            rFonts = run.find('.//w:rFonts', ns)
+            if rFonts is not None:
+                ascii_font = rFonts.get(f'{{{ns["w"]}}}ascii')
+                east_font = rFonts.get(f'{{{ns["w"]}}}eastAsia')
+                hansi_font = rFonts.get(f'{{{ns["w"]}}}hAnsi')
+                if ascii_font: fonts_in_para['ascii'].add(ascii_font)
+                if east_font: fonts_in_para['eastAsia'].add(east_font)
+                if hansi_font: fonts_in_para['hAnsi'].add(hansi_font)
+                if ascii_font and not east_font: missing_eastAsia = True
+        texts = para.findall('.//w:t', ns)
+        preview = ''.join(t.text or '' for t in texts)[:60]
+        if not preview.strip(): continue
+        issue = None
+        if len(fonts_in_para['ascii']) > 1:
+            issue = f"Multiple ascii fonts {fonts_in_para['ascii']}"
+        elif len(fonts_in_para['eastAsia']) > 1:
+            issue = f"Multiple eastAsia fonts {fonts_in_para['eastAsia']}"
+        elif missing_eastAsia:
+            issue = f"eastAsia font missing (ascii set but eastAsia not)"
+        if issue:
+            issues.append({"paragraph": i + 1, "issue": issue, "preview": preview})
+    return issues
+
+issues = detect_font_issues("{file_path}")
+print(json.dumps({"count": len(issues), "issues": issues[:20]}, ensure_ascii=False, indent=2))
+PYEOF
+```
+
+2. **Preview** — Show user what was found:
+
+```
+字体一致性检查：
+发现 {n} 处字体问题：
+- P12: eastAsia 字体缺失（仅设置了 ascii=Times New Roman）
+- P25: 同一段落中混用多种 ascii 字体 {Arial, Times New Roman}
+- P41: eastAsia 字体缺失
+...
+
+将使用配对: 宋体 ↔ Times New Roman, 黑体 ↔ Arial
+确认修复？
+```
+
+If running automatically after Phase 3 and no issues found, skip silently.
+If running automatically after Phase 3 and issues found, report and auto-fix (user already confirmed the formatting plan in Phase 2).
+
+3. **Normalize** — Run the normalization script from `../../references/font_normalization.md`:
+
+```bash
+python3 << 'PYEOF'
+import zipfile, xml.etree.ElementTree as ET, shutil, os
+
+# --- Full normalize_fonts() function from references/font_normalization.md ---
+
+result = normalize_fonts("{file_path}", cn_font="{cn_font}", en_font="{en_font}")
+print(f"Fixed {result['fixed_count']} font attribute issues.")
+for d in result['details'][:10]:
+    print(f"  - {d}")
+PYEOF
+```
+
+4. **Report** — Show what was fixed:
+
+```
+字体归一化完成：
+✅ 修复了 {n} 处字体属性问题
+  - 补充 eastAsia 属性: {x} 处
+  - 补充 ascii/hAnsi 属性: {y} 处
+  - 修正 hAnsi 与 ascii 不匹配: {z} 处
+使用配对: {cn_font} ↔ {en_font}
+```
+
+### Custom Font Pairing
+
+If the user specifies a font pairing in the Format Spec or via conversation:
+- "正文用楷体" → `cn_font='楷体'`, `en_font='Times New Roman'`
+- "标题用黑体+Arial" → use 黑体+Arial for heading runs
+- Default: 宋体 + Times New Roman
+
+---
+
 ## Post-Execution
 
 1. **Report results:**
@@ -272,6 +386,7 @@ User requests: "中英文混排", "规范标点", "修复空格", "CJK normaliza
    ✅ 已修改 8 项格式设置
    ✅ 已处理 142 段正文格式
    ✅ 已修正 23 处中英文混排
+   ✅ 字体归一化: 修复 15 处字体属性不一致
    ❌ 1 项失败: 页眉设置（需要手动在 Word 中调整）
    
    建议下一步：运行格式合规检查确认所有修改正确。
@@ -287,4 +402,5 @@ User requests: "中英文混排", "规范标点", "修复空格", "CJK normaliza
 - `../../references/chinese_standards.md` — CJK normalization rules
 - `../../references/tool_routing.md` — Tool selection priority
 - `../../references/token_budget.md` — Token efficiency rules
+- `../../references/font_normalization.md` — Font normalization detection + fix scripts, CJK font pairing map
 - `../../references/document_creation_rules.md` — New document anti-pattern rules (字体配对、内置样式、TOC)

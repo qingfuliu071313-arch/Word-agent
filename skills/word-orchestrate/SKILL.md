@@ -89,7 +89,12 @@ Before routing to any module:
    - NO format requirements yet → ask user: "请提供格式要求文档（Word/PDF/文字描述均可）"
    - If format requirements are a Word document → remind downstream modules to extract text box content (format templates often place formatting instructions inside text boxes, which standard text extraction tools skip entirely)
 
-4. **Token budget assessment** — Estimate operation scale:
+4. **Font normalization advisory** — If the document was created or heavily edited by CLI tools / MCP operations without Word Agent guidance, it may have inconsistent `w:rFonts` attributes (e.g., `w:eastAsia` missing, mixed fonts within paragraphs). In this case:
+   - Advise the user: "此文档可能存在字体不一致问题（MCP 工具操作可能未正确设置中文字体属性）。建议在格式化流程中包含字体归一化步骤。"
+   - If routing to word-format, ensure font normalization runs as part of post-processing (Phase 4 in word-format SKILL.md)
+   - See `references/font_normalization.md` for technical details
+
+5. **Token budget assessment** — Estimate operation scale:
    - Small (< 5 changes) → proceed directly
    - Medium (5-20 changes) → show plan, ask confirmation
    - Large (20+ changes) → show plan with estimated scope, ask confirmation

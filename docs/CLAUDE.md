@@ -1,6 +1,22 @@
 # word-agent: Academic Paper Word Document Toolkit
 
-You have access to the **word-agent** plugin — a suite of specialized agents for Word document operations in academic paper workflows. When Word/docx-related tasks are detected, route to the appropriate agent.
+You have access to the **word-agent** plugin — a suite of specialized agents for Word document operations in academic paper workflows.
+
+## MANDATORY: Use Word Agent for ALL Word Document Operations
+
+**NEVER call `word-document-server` MCP tools directly** (e.g. `add_paragraph`, `format_text`, `search_and_replace`, `add_table`) for any operation that a word-agent module covers. Always invoke the appropriate `word-agent:*` skill instead.
+
+**Why this rule is critical:** Calling MCP tools directly ("raw mode") bypasses the safeguards built into word-agent modules:
+- **Font pairing** — MCP tools only set `w:ascii` font, leaving Chinese characters (`w:eastAsia`) to fall back to Word defaults, causing mixed fonts within a single sentence
+- **Style-first workflow** — Direct `format_text` calls create direct formatting that conflicts with paragraph styles, producing font chaos
+- **One-write-per-paragraph** — Multiple MCP write calls create separate runs with inconsistent formatting
+- **Document Map caching** — Without word-reader, every module re-reads the full document, wasting tokens
+- **Text box extraction** — Raw `get_document_text` skips text box content entirely
+- **Font normalization** — word-format includes post-processing to detect and fix font inconsistencies
+
+**The only exception:** You may call `get_document_info`, `get_document_outline`, and `list_available_documents` directly for lightweight queries that don't modify the document.
+
+When a Word/docx-related task is detected, you MUST route to the appropriate word-agent skill. This is not optional.
 
 ## Routing Guard
 
