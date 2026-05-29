@@ -13,8 +13,14 @@
 - NEVER 对单个段落调用 `format_text` 设置字体字号
 - 流程：定义样式 → 写入内容（指定 style_name）→ 内容自动继承样式格式
 - 如果需要修改格式，修改样式定义，而不是修改单个段落
+- 修改样式定义使用 `format_document.py styles` 命令：
+  ```bash
+  python3 scripts/format_document.py doc.docx styles --name Normal \
+    --cn-font 宋体 --en-font "Times New Roman" --font-size 小四 \
+    --line-spacing 1.5 --first-indent 2char --alignment justify
+  ```
 
-**原因：** `format_text` 创建 direct formatting，优先级高于样式但容易不一致。当一个段落有样式+直接格式时，Word 会混合显示，导致同一行出现多种字体。
+**原因：** `format_text` 创建 direct formatting，优先级高于样式但容易不一致。当一个段落有样式+直接格式时，Word 会混合显示，导致同一行出现多种字体。`format_text` MCP 工具也不支持段落级属性（行距、缩进、对齐），只能设字体/字号/加粗/斜体/颜色。
 
 ## Rule 2: 使用 Word 内置标题样式
 
@@ -42,7 +48,13 @@
 | 标题 | 黑体 | Arial |
 | 强调 | 楷体 | Times New Roman |
 
-**python-docx 设置方式：**
+**推荐方式（format_document.py 自动处理配对）：**
+```bash
+python3 scripts/format_document.py doc.docx styles --name Normal \
+  --cn-font 宋体 --en-font "Times New Roman"
+```
+
+**手动方式（python-docx）：**
 ```python
 from docx.oxml.ns import qn
 
@@ -95,8 +107,10 @@ style.font.element.rPr.rFonts.set(qn('w:eastAsia'), '宋体')  # 设 eastAsia
 
 | ❌ 错误做法 | ✅ 正确做法 | 后果 |
 |------------|-----------|------|
-| `format_text(p, font="宋体")` 只设中文 | 修改样式同时设 eastAsia + ascii | 英文变 Calibri |
+| `format_text(p, font="宋体")` 只设中文 | `format_document.py styles --cn-font 宋体 --en-font TNR` | 英文变 Calibri |
+| `format_text` 设行距/缩进 | `format_document.py styles --line-spacing 1.5` | format_text 不支持这些参数，静默失败 |
 | `create_custom_style("MyH1")` 做标题 | 修改内置 `Heading 1` 样式 | TOC 失效 |
 | 分两次 `add_paragraph` 写同一段 | 拼好字符串一次写入 | 字体不一致 |
 | 先 `add_paragraph` 再 `format_text` | 写入时指定 `style_name` | 直接格式覆盖样式 |
-| 用 `add_paragraph` 写目录文本 | 用 XML field code 插入 TOC | 目录无法更新 |
+| 用 `add_paragraph` 写目录文本 | `format_document.py toc` 插入域代码 | 目录无法更新 |
+| 不备份直接修改格式 | `format_document.py` 自动创建备份 | 失败时文档损坏无法恢复 |

@@ -43,6 +43,28 @@ FONT_PAIRS_CN_TO_EN = {
     'Microsoft YaHei': 'Arial',
     '新宋体': 'Times New Roman',
     'NSimSun': 'Times New Roman',
+    '华文中宋': 'Times New Roman',
+    'STZhongsong': 'Times New Roman',
+    '华文楷体': 'Times New Roman',
+    'STKaiti': 'Times New Roman',
+    '华文宋体': 'Times New Roman',
+    'STSong': 'Times New Roman',
+    '华文仿宋': 'Times New Roman',
+    'STFangsong': 'Times New Roman',
+    '华文细黑': 'Arial',
+    'STXihei': 'Arial',
+    '华文黑体': 'Arial',
+    '方正小标宋': 'Times New Roman',
+    '方正仿宋': 'Times New Roman',
+    '方正楷体': 'Times New Roman',
+    '方正黑体': 'Arial',
+    '方正书宋': 'Times New Roman',
+    '等线': 'Calibri',
+    'DengXian': 'Calibri',
+    '隶书': 'Times New Roman',
+    'LiSu': 'Times New Roman',
+    '幼圆': 'Arial',
+    'YouYuan': 'Arial',
 }
 
 FONT_PAIRS_EN_TO_CN = {
@@ -52,6 +74,12 @@ FONT_PAIRS_EN_TO_CN = {
     'Cambria': '宋体',
     'Helvetica': '黑体',
     'Verdana': '黑体',
+    'Georgia': '宋体',
+    'Palatino Linotype': '宋体',
+    'Tahoma': '黑体',
+    'Segoe UI': '黑体',
+    'Consolas': '宋体',
+    'Courier New': '宋体',
 }
 
 ALL_NS = {}

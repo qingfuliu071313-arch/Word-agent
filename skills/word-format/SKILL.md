@@ -130,50 +130,76 @@ For each rule in Format Spec:
 
 ## Phase 3: Execute Changes
 
-### Execution Order
+### IMPORTANT: Style-First, No Direct Formatting
 
-Group by operation type, not by location. This minimizes context switches and tool call overhead.
+All formatting MUST go through style modifications, never through `format_text` direct formatting. See `../../references/document_creation_rules.md` Rule 1. The `format_document.py` script modifies style definitions in `styles.xml`, so changes propagate to all paragraphs using that style automatically.
+
+### Preferred Path: One-Shot via apply-spec
+
+If Phase 1 produced a complete Format Spec, convert it to JSON and apply everything in one call:
+
+```bash
+python3 scripts/format_document.py "{file_path}" apply-spec --spec format_spec.json
+```
+
+This single call handles: page setup, all style modifications (fonts, sizes, spacing, indent, alignment), and headers/footers. Follow with CJK normalization and TOC if needed.
+
+### Alternative Path: Step-by-Step
+
+If applying incrementally, execute in this order:
 
 ```
+Step 0: Backup (automatic)
+  → format_document.py creates a timestamped backup before any modification
+  → Backup path printed to output for recovery if needed
+
 Step 1: Page Setup
-  → If page size or margins need changing → XML edit or MCP
-  → One operation covers the entire document
+  → python3 scripts/format_document.py "{file_path}" page-setup \
+      --size A4 --margins "2.54cm,2.54cm,3.17cm,3.17cm" --orientation portrait
 
-Step 2: Create/Update Styles
-  → create_custom_style for each heading level that needs updating
-  → This automatically applies to all paragraphs using that style
+Step 2: Style Definitions (handles fonts, sizes, spacing, indent, alignment)
+  → python3 scripts/format_document.py "{file_path}" styles \
+      --name Normal --cn-font 宋体 --en-font "Times New Roman" \
+      --font-size 小四 --line-spacing 1.5 --first-indent 2char --alignment justify
+  → python3 scripts/format_document.py "{file_path}" styles \
+      --name "Heading 1" --cn-font 黑体 --en-font Arial \
+      --font-size 三号 --bold --alignment center --space-before 24pt --space-after 12pt
+  → Repeat for Heading 2, Heading 3, Caption, etc.
+  → This replaces BOTH font setting AND paragraph formatting in one call per style
 
-Step 3: Body Formatting
-  → format_text for body paragraphs that need font/size/spacing changes
-  → Batch by identifying paragraph ranges from Document Map
+Step 3: Paragraph Overrides (only for paragraphs needing different formatting from their style)
+  → python3 scripts/format_document.py "{file_path}" paragraph \
+      --style Normal --range "166,187" --line-spacing 1.0
+  → Example: reference section paragraphs use Normal style but need single-spacing
 
-Step 4: Special Element Formatting
-  → Figure/table captions, references, abstract
-  → Targeted format_text calls using Document Map locations
-
-Step 5: CJK Normalization (if requested)
+Step 4: CJK Normalization (if requested)
   → Execute in order per references/chinese_standards.md:
      a. Punctuation normalization (search_and_replace, ~5-8 calls)
      b. CJK-English spacing (search_and_replace, ~3-4 calls)
      c. Number-unit spacing (search_and_replace, ~2-3 calls)
 
-Step 6: Headers/Footers (if required)
-  → XML manipulation for header/footer content and page numbers
+Step 5: Headers/Footers (if required)
+  → python3 scripts/format_document.py "{file_path}" header-footer \
+      --header "论文简称" --page-number --header-font "宋体,Times New Roman" --header-size 五号
 
-Step 7: First-Line Indent (if required)
-  → format_text or style update for body paragraphs
-
-Step 8: TOC (if requested)
-  → See TOC Generation section below
+Step 6: TOC (if requested)
+  → python3 scripts/format_document.py "{file_path}" toc \
+      --position "引言" --levels 3 --title 目录
+  → See TOC Generation section below for details
 ```
 
 ### Error Handling
 
-If a format_text or search_and_replace call fails:
-1. Log the failure with the specific paragraph/pattern
-2. Continue with remaining operations (don't stop on first error)
+If any `format_document.py` call fails:
+1. The script preserves the backup — original document is recoverable
+2. **Stop execution** — do not proceed to next step
+3. Report the error with specific details to the user
+4. Suggest fix or alternative approach
+
+If a `search_and_replace` MCP call fails:
+1. Report the failed pattern
+2. Continue with remaining patterns (CJK normalization patterns are independent)
 3. Report all failures at the end
-4. Suggest alternative approaches for failed operations
 
 ---
 
@@ -197,40 +223,14 @@ User requests: "生成目录", "插入目录", "TOC", "table of contents"
    - Default: show to heading level 3
    - User can specify: "只显示到二级标题"
 
-4. **Insert TOC field code** — Via XML manipulation:
+4. **Insert TOC field code** — Via `format_document.py`:
 
 ```bash
-# Unpack document
-python scripts/office/unpack.py document.docx unpacked/
-
-# Insert TOC field code at specified position in document.xml
-# The TOC field code:
-# <w:sdt>
-#   <w:sdtPr><w:docPartObj><w:docPartGallery w:val="Table of Contents"/></w:docPartObj></w:sdtPr>
-#   <w:sdtContent>
-#     <w:p>
-#       <w:r>
-#         <w:fldChar w:fldCharType="begin"/>
-#       </w:r>
-#       <w:r>
-#         <w:instrText>TOC \o "1-3" \h \z \u</w:instrText>
-#       </w:r>
-#       <w:r>
-#         <w:fldChar w:fldCharType="separate"/>
-#       </w:r>
-#       <w:r>
-#         <w:t>（请在 Word 中更新域以显示目录）</w:t>
-#       </w:r>
-#       <w:r>
-#         <w:fldChar w:fldCharType="end"/>
-#       </w:r>
-#     </w:p>
-#   </w:sdtContent>
-# </w:sdt>
-
-# Repack
-python scripts/office/pack.py unpacked/ output.docx --original document.docx
+python3 scripts/format_document.py "{file_path}" toc \
+  --position "引言" --levels 3 --title 目录
 ```
+
+The `--position` can be a paragraph index (0-based) or a text string to match. The script inserts a proper SDT+field code structure that Word recognizes as an auto-updating TOC.
 
 5. **Inform user:**
    > 目录已插入。请在 Word 中打开文档后：
@@ -359,10 +359,12 @@ If the user specifies a font pairing in the Format Spec or via conversation:
 
 ## Shared Resources
 
+- `../../scripts/format_document.py` — Formatting engine: page setup, styles, headers, TOC, apply-spec
+- `../../scripts/normalize_fonts.py` — Font normalization: detect and fix font inconsistencies
 - `../../references/format_spec_parser.md` — Format Spec extraction rules
 - `../../references/academic_formatting.md` — Academic formatting knowledge base
 - `../../references/chinese_standards.md` — CJK normalization rules
 - `../../references/tool_routing.md` — Tool selection priority
 - `../../references/token_budget.md` — Token efficiency rules
 - `../../references/font_normalization.md` — Font normalization detection + fix scripts, CJK font pairing map
-- `../../references/document_creation_rules.md` — New document anti-pattern rules (字体配对、内置样式、TOC)
+- `../../references/document_creation_rules.md` — Style-first rules, anti-patterns (字体配对、内置样式、TOC)
