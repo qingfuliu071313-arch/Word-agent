@@ -1,7 +1,8 @@
 # Word-Agent Python Dependencies
 
-# P0: Core (word-reader)
+# P0: Core (word-reader + format-engine)
 docx2python>=2.0.0
+python-docx>=0.8.11
 deepdiff>=6.0
 redlines>=0.4.0
 
