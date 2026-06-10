@@ -85,6 +85,44 @@ Note: Docker mode only supports file-level operations. Live editing (COM/JXA) re
 
 注意：Docker 模式仅支持文件级操作。实时编辑（COM/JXA）需要本地安装 Word。
 
+### Windows Install / Windows 安装说明
+
+All core features work on Windows — the Python script layer is fully cross-platform, live editing uses COM (Windows-native), and the default fonts (宋体/黑体/Times New Roman) are Windows system fonts. Three extra steps:
+
+全部核心功能在 Windows 上可用——Python 脚本层完全跨平台，实时编辑走 Windows 原生的 COM，默认字体（宋体/黑体/Times New Roman）本就是 Windows 系统字体。需要额外做三件事：
+
+```powershell
+# 1. Install Git for Windows (Claude Code runs hooks via Git Bash)
+#    安装 Git for Windows（Claude Code 通过 Git Bash 执行 hook）
+winget install Git.Git
+
+# 2. Install jq — required by the smart-routing hook.
+#    Without it the hook degrades gracefully (no errors), but automatic
+#    skill routing is disabled and you must invoke skills manually.
+#    安装 jq——智能路由 hook 依赖它。缺失时 hook 静默降级（不报错），
+#    但自动路由失效，需要手动调用 skill。
+winget install jqlang.jq
+
+# 3. (Optional) LibreOffice — only needed for legacy .doc conversion.
+#    Add its program directory to PATH so `soffice` resolves.
+#    （可选）LibreOffice——仅处理旧版 .doc 文件时需要，
+#    安装后把程序目录加入 PATH 使 `soffice` 命令可用。
+winget install TheDocumentFoundation.LibreOffice
+# PATH += C:\Program Files\LibreOffice\program
+```
+
+Then follow Manual Install above in Git Bash (use `pip` instead of `pip3` if that is how Python is installed). `scripts/setup.sh` also runs in Git Bash.
+
+之后在 Git Bash 中按上方"手动安装"步骤执行即可（若 Python 安装方式不同，`pip3` 换成 `pip`）。`scripts/setup.sh` 也可以在 Git Bash 中运行。
+
+| Feature / 功能 | Windows 支持 |
+|---|---|
+| Formatting, editing, checking, references, submission prep / 排版、编辑、检查、参考文献、投稿准备 | ✅ Full / 完整 |
+| Live editing (Word open) / 实时编辑（Word 打开状态） | ✅ Via COM / 走 COM |
+| File-lock detection / 文件锁检测 | ✅ Native `~$` owner files / 原生 `~$` 锁文件 |
+| Smart routing hook / 智能路由 hook | ✅ Needs Git Bash + jq / 需 Git Bash + jq |
+| Legacy .doc conversion / 旧版 .doc 转换 | ✅ Needs LibreOffice in PATH / 需 LibreOffice 加入 PATH |
+
 ---
 
 ## MCP Server Configuration / MCP 服务器配置
