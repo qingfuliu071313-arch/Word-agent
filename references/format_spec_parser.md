@@ -132,32 +132,13 @@ format_spec:
 ### 从 Word/PDF 格式要求文档提取
 
 1. 读取文档全文
-2. **提取文本框内容（关键步骤）** — 格式模板中的格式要求常常写在文本框（TextBox）里作为注释/批注。`get_document_text` 和 `docx2python` 都无法读取文本框内容。必须通过解析文档 XML 提取 `w:txbxContent` 元素：
+2. **提取文本框内容（强制步骤，必须运行脚本）** — 格式模板中的格式要求常常写在文本框（TextBox）里作为注释/批注。`get_document_text` 和 `docx2python` 都无法读取文本框内容。更关键的是，**文本框经常不在 document.xml 里** —— 高校论文模板常把格式批注放在页眉的文本框中（如 word/header2.xml），只扫 document.xml 会完全漏掉。必须运行专用脚本扫描全部 XML 部件：
    ```bash
-   python3 << 'PYEOF'
-   import zipfile
-   import xml.etree.ElementTree as ET
-
-   ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
-
-   with zipfile.ZipFile("{file_path}", 'r') as z:
-       xml_content = z.read('word/document.xml')
-
-   root = ET.fromstring(xml_content)
-   for i, txbx in enumerate(root.findall('.//w:txbxContent', ns)):
-       paragraphs = []
-       for p in txbx.findall('.//w:p', ns):
-           text = ''.join(r.text or '' for r in p.findall('.//w:t', ns))
-           if text.strip():
-               paragraphs.append(text)
-       if paragraphs:
-           print(f"[TextBox {i+1}]")
-           for t in paragraphs:
-               print(f"  {t}")
-           print()
-   PYEOF
+   python3 scripts/extract_textboxes.py "{file_path}"          # JSON 输出
+   python3 scripts/extract_textboxes.py "{file_path}" --text   # 可读输出
    ```
-   将文本框内容与正文内容合并后一起搜索格式规则。
+   脚本扫描 word/ 下所有 XML 部件（document.xml、header*.xml、footer*.xml、footnotes.xml 等），同时覆盖 DrawingML 和 VML 两种文本框，并自动去重 mc:Fallback 的重复内容。输出中的 `parts_with_textboxes` 字段标明每个文本框的来源部件。
+   将文本框内容与正文内容合并后一起搜索格式规则。**无论是否预期有文本框，此脚本都必须运行一次**，并在向用户确认 Format Spec 时汇报扫描结果（见 word-format SKILL.md Phase 1 用户确认模板）。
 3. 搜索关键词定位格式规则段落（正文 + 文本框内容）：
    - 页面设置相关：`页边距|页面大小|纸张|margin|page size`
    - 字体相关：`字体|字号|font|size|宋体|黑体|Times`

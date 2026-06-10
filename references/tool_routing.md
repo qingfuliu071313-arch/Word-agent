@@ -37,7 +37,7 @@ adeu                 → python3 -c "import adeu"（不可用时跳过 P4 路由
 | 读取特定段落 | `get_paragraph_text_from_document` | `get_document_text` + 截取 | 按需读取，避免全文 |
 | 读取全文 | `get_document_text` | `docx2python` | 仅在确实需要全文时使用 |
 | 查找文本 | `find_text_in_document` | `get_document_text` + 搜索 | MCP 原生搜索更快 |
-| 提取文本框内容 | `zipfile` + `ElementTree` 解析 `w:txbxContent` | `get_document_xml` + 手动解析 | MCP 和 docx2python 均跳过文本框 |
+| 提取文本框内容 | `python3 scripts/extract_textboxes.py` | `get_document_xml` + 手动解析 | MCP 和 docx2python 均跳过文本框；文本框常在页眉等 document.xml 之外的部件，脚本扫描全部 XML 部件 |
 | 获取批注 | `get_all_comments` | `get_comments_by_author` | word-document-server 读取 |
 | 获取修订列表 | `mcp__docx-mcp__get_tracked_changes` | XML 手动解析 | docx-mcp 提供结构化修订信息 |
 

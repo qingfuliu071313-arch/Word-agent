@@ -126,7 +126,13 @@ The user may provide format requirements as:
 Follow `../../references/format_spec_parser.md` to extract a structured Format Spec:
 
 1. Read the format requirement document
-2. **Extract text box content (critical)** — Format templates frequently place formatting instructions inside text boxes as annotations. `get_document_text` and `docx2python` completely skip text boxes. You MUST parse the document XML to extract `w:txbxContent` elements. See `format_spec_parser.md` Step 2 for the extraction script. Merge text box content with body text before searching for rules.
+2. **Extract text box content (MANDATORY script run, no exceptions)** — Format templates frequently place formatting instructions inside text boxes as annotations. `get_document_text` and `docx2python` completely skip text boxes, and text boxes often live OUTSIDE document.xml — university thesis templates commonly put format annotations in header text boxes (e.g. `word/header2.xml`). Run the dedicated script on EVERY requirement/template .docx (it scans all XML parts — document, headers, footers, notes — and dedupes mc:Fallback copies):
+
+   ```bash
+   python3 scripts/extract_textboxes.py "{requirement_or_template}.docx"
+   ```
+
+   Merge text box content with body text before searching for rules. Run this even when you expect no text boxes — the scan result MUST be reported in the User Confirmation below, so a skipped scan is visible to the user. If reusing a cached/previous format_spec.json, re-run this scan and verify the spec actually incorporated text-box rules before trusting it.
 3. Search for keywords (in both body text AND text box content): 页边距, 字体, 字号, 行距, 编号, 页码, margins, font, spacing...
 4. Extract specific values for each rule
 5. For Chinese font sizes, convert using the size chart in `format_spec_parser.md`
@@ -136,8 +142,13 @@ Follow `../../references/format_spec_parser.md` to extract a structured Format S
 
 Present the extracted Format Spec to the user:
 
+The confirmation MUST include the text-box scan line (🔍). If the scan was somehow not run, say so explicitly — never silently omit it.
+
 ```
 我从您的格式要求中提取了以下规则：
+
+🔍 文本框扫描：共 3 个（document.xml ×1, header2.xml ×2），提取格式规则 5 条
+   （若为 0 个：「文本框扫描：未发现文本框，规则全部来自正文」）
 
 📄 页面：A4，页边距上下2.54cm 左右3.17cm
 📝 正文：宋体/Times New Roman，小四(12pt)，1.5倍行距

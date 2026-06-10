@@ -37,7 +37,7 @@ Step 5: get_document_text        → full text only as last resort (expensive)
 
 **Never start with `get_document_text`.** Always build the map top-down: metadata → outline → targeted detail.
 
-**Always extract text boxes.** `get_document_text` and `docx2python` both completely skip text box content (`w:txbxContent`). Text boxes are commonly used in format templates as annotations containing formatting rules. Parse the document XML (via zipfile + ElementTree) to find all `w:txbxContent` elements. See SKILL.md Step 3.5 for the extraction script.
+**Always extract text boxes.** `get_document_text` and `docx2python` both completely skip text box content (`w:txbxContent`), and text boxes often live outside document.xml — university templates commonly put format annotations in header text boxes (e.g. `word/header2.xml`). Run `python3 scripts/extract_textboxes.py "{file_path}"` — it scans ALL XML parts (document, headers, footers, notes) and dedupes mc:Fallback copies. See SKILL.md Step 3.5.
 
 ## Document Map Specification
 
@@ -71,8 +71,8 @@ Every Document Map must include these sections:
 - Comments: {count} (by {authors})
 
 ### Text Boxes (if any)
-- [TextBox 1]: "{first 100 chars}..."
-- [TextBox 2]: "{first 100 chars}..."
+- [TextBox 1] ({source part, e.g. word/header2.xml}): "{first 100 chars}..."
+- [TextBox 2] ({source part}): "{first 100 chars}..."
 
 ### Format Issues Detected
 - ⚠ {location}: {description of inconsistency}
