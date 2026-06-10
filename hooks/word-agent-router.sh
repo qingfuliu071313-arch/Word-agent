@@ -35,7 +35,7 @@ fi
 # ── Tier 2: Complexity classification ──
 
 # HEAVY indicators: multi-step, whole-document, or specialized workflows
-HEAVY_PATTERNS='(排版|格式化|format\s*(entire|whole|document|all)|审稿|审阅|修订|revision|review|tracked\s*change|修订模式|投稿|submit|clean\s*copy|删除批注|接受修订|检查引用|交叉引用|cross.?ref|检查格式|格式验证|compliance|对比|比较|compare|diff|读取|分析|看看|\bread\b|\banalyz|参考文献|bibliography|citation\s*format|三线表|three.?line|生成目录|TOC|table\s*of\s*content|批量|bulk|batch|所有|全部|整篇|每[个一]|all\s*(paragraph|heading|table|figure)|拆分|split|合并|merge|从零写|新建文档|create\s*document|write\s*from\s*scratch|水印|watermark|PII|结构检查|structural|paraId|bookmark|布局检查|layout\s*diag|公式|equation|撤销|undo)'
+HEAVY_PATTERNS='(排版|格式化|改格式|格式[^。，,]{0,10}(修改|调整|要求)|(修改|调整)[^。，,]{0,10}格式|按[^。，,]{0,12}(要求|模板|规范)|模板|template|format\s*(entire|whole|document|all)|审稿|审阅|修订|revision|review|tracked\s*change|修订模式|投稿|submit|clean\s*copy|删除批注|接受修订|检查引用|交叉引用|cross.?ref|检查格式|格式验证|compliance|对比|比较|compare|diff|读取|分析|看看|\bread\b|\banalyz|参考文献|bibliography|citation\s*format|三线表|three.?line|生成目录|TOC|table\s*of\s*content|批量|bulk|batch|所有|全部|整篇|每[个一]|all\s*(paragraph|heading|table|figure)|拆分|split|合并|merge|从零写|新建文档|create\s*document|write\s*from\s*scratch|水印|watermark|PII|结构检查|structural|paraId|bookmark|布局检查|layout\s*diag|公式|equation|撤销|undo)'
 
 if echo "$USER_PROMPT" | grep -iE "$HEAVY_PATTERNS" > /dev/null 2>&1; then
   # HEAVY: Complex operation — route through word-agent skills
