@@ -56,83 +56,137 @@ DEFAULT → Both Modes (A + B)
 ## Mode A: Cross-Reference Check
 
 ### Prerequisites
-- Document Map from word-reader (or conversation context)
-- Full document text (this mode requires full text scanning)
+- Document Map from word-reader (`.word-agent/{name}.map.md` sidecar file, or conversation context)
+- The extraction scripts below read the full text **directly from the docx file inside Python** — the full text never enters the conversation context
+
+**超大文档降级**：对百页级文档（如学位论文），若一次性扫描内存/耗时过大，按 Document Map 的章节段落范围分章读取并扫描，再合并各章的定义/引用集合后统一应用 R1-R7。
 
 ### Step 1: Extract All Asset Definitions
 
-Scan document text for figure/table/equation definitions (captions):
+Scan the document for figure/table/equation definitions (captions). 编号支持四种形态：普通编号（图1）、章节式编号（图2-1、图2.3）、补充材料编号（图S1 / Table S1）、附录编号（表A1）。
 
 ```bash
 python3 << 'PYEOF'
 import re
 import json
 
-text = """${DOCUMENT_TEXT}"""
+FILE_PATH = "{file_path}"  # ← 填入 docx 绝对路径
 
-# Figure definitions (captions)
-fig_defs_cn = re.findall(r'^[  ]*图\s*(\d+)[\s.．:：]', text, re.MULTILINE)
-fig_defs_en = re.findall(r'^[  ]*(?:Figure|Fig\.)\s*(\d+)[\s.:]', text, re.MULTILINE)
-fig_defs = sorted(set(int(n) for n in fig_defs_cn + fig_defs_en))
+# 直接从 docx 文件读取全文（不经过对话上下文）
+try:
+    from docx2python import docx2python
+    with docx2python(FILE_PATH) as doc:
+        text = doc.text
+except ImportError:
+    from docx import Document
+    text = "\n".join(p.text for p in Document(FILE_PATH).paragraphs)
 
-# Table definitions
-tbl_defs_cn = re.findall(r'^[  ]*表\s*(\d+)[\s.．:：]', text, re.MULTILINE)
-tbl_defs_en = re.findall(r'^[  ]*Table\s*(\d+)[\s.:]', text, re.MULTILINE)
-tbl_defs = sorted(set(int(n) for n in tbl_defs_cn + tbl_defs_en))
+NUM = r'(\d+(?:[-.．]\d+)?)'   # 普通/章节式编号: 1, 2-1, 2.3, 2．3
 
-# Equation definitions (right-aligned numbers)
-eq_defs = re.findall(r'[（(]\s*(\d+)\s*[)）]\s*$', text, re.MULTILINE)
-eq_defs = sorted(set(int(n) for n in eq_defs))
+def norm(n):
+    return n.replace('．', '.')
 
-print(json.dumps({
-    "figures_defined": fig_defs,
-    "tables_defined": tbl_defs,
-    "equations_defined": eq_defs
-}, ensure_ascii=False))
+def defs(patterns):
+    out = []
+    for pat in patterns:
+        out += [norm(m) for m in re.findall(pat, text, re.MULTILINE)]
+    return sorted(set(out))
+
+result = {
+    # 普通 + 章节式编号
+    "figures_defined": defs([
+        r'^[  ]*图\s*' + NUM + r'[\s.．:：]',
+        r'^[  ]*(?:Figure|Fig\.)\s*' + NUM + r'[\s.:]',
+    ]),
+    "tables_defined": defs([
+        r'^[  ]*表\s*' + NUM + r'[\s.．:：]',
+        r'^[  ]*Table\s*' + NUM + r'[\s.:]',
+    ]),
+    # 公式编号（行末右对齐），支持章节式 式(3.2)
+    "equations_defined": defs([
+        r'[（(]\s*' + NUM + r'\s*[)）]\s*$',
+    ]),
+    # 补充材料编号 (图S1 / Figure S1 / Table S1 / 表S1)
+    "figures_S_defined": defs([
+        r'^[  ]*图\s*S(\d+)[\s.．:：]',
+        r'^[  ]*(?:Figure|Fig\.)\s*S(\d+)[\s.:]',
+    ]),
+    "tables_S_defined": defs([
+        r'^[  ]*表\s*S(\d+)[\s.．:：]',
+        r'^[  ]*Table\s*S(\d+)[\s.:]',
+    ]),
+    # 附录编号 (表A1 / 图A1)
+    "figures_A_defined": defs([r'^[  ]*图\s*A(\d+)[\s.．:：]']),
+    "tables_A_defined": defs([r'^[  ]*表\s*A(\d+)[\s.．:：]']),
+}
+print(json.dumps(result, ensure_ascii=False))
 PYEOF
 ```
 
 ### Step 2: Extract All References
 
-Scan text for in-text references:
+Scan for in-text references（同样直接从文件读取；编号命名空间与 Step 1 一一对应）:
 
 ```bash
 python3 << 'PYEOF'
 import re
 import json
 
-text = """${DOCUMENT_TEXT}"""
+FILE_PATH = "{file_path}"  # ← 填入 docx 绝对路径
 
-# Figure references
-fig_refs_cn = [(m.start(), int(m.group(1))) for m in re.finditer(r'(?:如)?图\s*(\d+)', text)]
-fig_refs_en = [(m.start(), int(m.group(1))) for m in re.finditer(r'(?:Figure|Fig\.)\s*(\d+)', text)]
-fig_refs = fig_refs_cn + fig_refs_en
+try:
+    from docx2python import docx2python
+    with docx2python(FILE_PATH) as doc:
+        text = doc.text
+except ImportError:
+    from docx import Document
+    text = "\n".join(p.text for p in Document(FILE_PATH).paragraphs)
+
+NUM = r'(\d+(?:[-.．]\d+)?)'
+
+def norm(n):
+    return n.replace('．', '.')
+
+def refs(patterns):
+    out = []
+    for pat in patterns:
+        out += [(m.start(), norm(m.group(1))) for m in re.finditer(pat, text)]
+    return out
+
+# Figure references（普通/章节式 + 补充材料 S + 附录 A）
+fig_refs   = refs([r'(?:如)?图\s*' + NUM, r'(?:Figure|Fig\.)\s*' + NUM])
+fig_refs_s = refs([r'(?:如)?图\s*S(\d+)', r'(?:Figure|Fig\.)\s*S(\d+)'])
+fig_refs_a = refs([r'(?:如)?图\s*A(\d+)'])
 
 # Table references
-tbl_refs_cn = [(m.start(), int(m.group(1))) for m in re.finditer(r'(?:如|见)?表\s*(\d+)', text)]
-tbl_refs_en = [(m.start(), int(m.group(1))) for m in re.finditer(r'Table\s*(\d+)', text)]
-tbl_refs = tbl_refs_cn + tbl_refs_en
+tbl_refs   = refs([r'(?:如|见)?表\s*' + NUM, r'Table\s*' + NUM])
+tbl_refs_s = refs([r'(?:如|见)?表\s*S(\d+)', r'Table\s*S(\d+)'])
+tbl_refs_a = refs([r'(?:如|见)?表\s*A(\d+)'])
 
-# Equation references
-eq_refs = [(m.start(), int(m.group(1))) for m in re.finditer(r'(?:式|公式|Eq\.|Equation)\s*[（(]\s*(\d+)\s*[)）]', text)]
+# Equation references（式(1)、式（3.2）、式 (2-1)、公式(1)、Eq. (1)、Equation (1)）
+eq_refs = refs([r'(?:式|公式|Eq\.|Equation)\s*[（(]\s*' + NUM + r'\s*[)）]'])
 
 # Format consistency
-fig_format_cn = len(re.findall(r'(?:如)?图\s*\d+', text))
-fig_format_en = len(re.findall(r'(?:Figure|Fig\.)\s*\d+', text))
-tbl_format_cn = len(re.findall(r'(?:如|见)?表\s*\d+', text))
-tbl_format_en = len(re.findall(r'Table\s*\d+', text))
+format_counts = {
+    "fig_cn": len(re.findall(r'(?:如)?图\s*\d', text)),
+    "fig_en": len(re.findall(r'(?:Figure|Fig\.)\s*\d', text)),
+    "tbl_cn": len(re.findall(r'(?:如|见)?表\s*\d', text)),
+    "tbl_en": len(re.findall(r'Table\s*\d', text)),
+}
+
+def pack(items):
+    return [{"pos": p, "num": n} for p, n in items]
 
 print(json.dumps({
-    "figure_refs": [{"pos": p, "num": n} for p, n in fig_refs],
-    "table_refs": [{"pos": p, "num": n} for p, n in tbl_refs],
-    "equation_refs": [{"pos": p, "num": n} for p, n in eq_refs],
-    "format_counts": {
-        "fig_cn": fig_format_cn, "fig_en": fig_format_en,
-        "tbl_cn": tbl_format_cn, "tbl_en": tbl_format_en
-    }
+    "figure_refs": pack(fig_refs), "figure_S_refs": pack(fig_refs_s), "figure_A_refs": pack(fig_refs_a),
+    "table_refs": pack(tbl_refs), "table_S_refs": pack(tbl_refs_s), "table_A_refs": pack(tbl_refs_a),
+    "equation_refs": pack(eq_refs),
+    "format_counts": format_counts,
 }, ensure_ascii=False))
 PYEOF
 ```
+
+注意：S（补充材料）与 A（附录）编号是独立命名空间，连续性检查（R2）应在各命名空间内分别进行；章节式编号（2-1, 2.3）的连续性按章内序号判断。
 
 ### Step 3: Apply Check Rules
 

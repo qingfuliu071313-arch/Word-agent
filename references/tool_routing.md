@@ -82,8 +82,8 @@ adeu                 → python3 -c "import adeu"（不可用时跳过 P4 路由
 
 | 操作 | 首选路径 | 备选路径 | 说明 |
 |------|---------|---------|------|
-| 修改格式 | `format_text` | XML 编辑 | 单段落格式用 MCP |
-| 批量格式修改 | `format_text` 循环 | XML 编辑 | 同类格式变更可批量 MCP 调用 |
+| 修改格式 | **样式优先**：`scripts/format_document.py styles` 子命令（修改样式定义，自动传播到所有使用该样式的段落） | `format_text` 仅限零散 run 级特例（如单个词加粗），且事后必须运行 `normalize_fonts.py` | 禁止用 format_text 做段落/文档级格式化（直接格式化与样式冲突，造成字体混乱） |
+| 批量格式修改 | `scripts/format_document.py styles` / `apply-spec` 一次调用 | XML 编辑 | 禁止 `format_text` 循环 —— 每次调用都可能产生 run 级字体不一致 |
 | 创建自定义样式 | `create_custom_style` | XML 编辑 | — |
 | 生成目录 | XML 插入 TOC 域代码 | — | 需要用户在 Word 中更新域 |
 

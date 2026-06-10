@@ -7,7 +7,7 @@ description: >-
   table-figure, reviewer, checker, submit). Manages Token budget by enforcing
   lazy-loading, structure caching, and tool routing priority. Triggers: any
   Word/docx related request that doesn't clearly map to a single specialist.
-tools: Read, Bash, Glob, Grep, mcp__word-document-server__get_document_info, mcp__word-document-server__get_document_outline, mcp__word-document-server__list_available_documents
+tools: Read, Bash, Glob, Grep, mcp__word-document-server__get_document_info, mcp__word-document-server__get_document_outline, mcp__word-document-server__list_available_documents, mcp__word-mcp-live__get_active_document
 model: sonnet
 ---
 
@@ -55,7 +55,7 @@ See `references/doc_conversion.md` for full conversion code and font mapping tab
 ## Token Budget Rules
 
 1. **Lazy Loading** — Use `get_document_outline` first (not `get_document_text`). Only read full text when required.
-2. **Structure Caching** — word-reader generates a Document Map once; all downstream modules receive it, never re-read the full document.
+2. **Structure Caching** — word-reader generates a Document Map once and persists it to `{doc_dir}/.word-agent/{name}.map.md`; downstream modules Read that file (validated by mtime: map newer than docx), never re-read the full document.
 3. **Tool Priority** — MCP single-call > MCP multi-call > XML unpack/edit/pack. See `references/tool_routing.md`.
 4. **Batch Operations** — Group same-type changes into batch execution, not one-at-a-time.
 5. **On-Demand Detail** — Only read paragraph-level content for sections that need modification.

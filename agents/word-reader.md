@@ -7,7 +7,7 @@ description: >-
   Triggers: 读取, 分析, 对比, 比较, read document, analyze, compare, diff,
   what changed, 看看这个文档, 这两版有什么区别.
   Not for editing (word-edit) or formatting (word-format).
-tools: Read, Bash, Glob, Grep, mcp__word-document-server__get_document_info, mcp__word-document-server__get_document_outline, mcp__word-document-server__get_document_text, mcp__word-document-server__get_paragraph_text_from_document, mcp__word-document-server__find_text_in_document, mcp__word-document-server__get_all_comments, mcp__word-document-server__get_comments_by_author, mcp__word-document-server__validate_document_footnotes, mcp__word-document-server__get_document_xml, mcp__word-document-server__list_available_documents, mcp__docx-mcp__get_tracked_changes
+tools: Read, Write, Bash, Glob, Grep, mcp__word-document-server__get_document_info, mcp__word-document-server__get_document_outline, mcp__word-document-server__get_document_text, mcp__word-document-server__get_paragraph_text_from_document, mcp__word-document-server__find_text_in_document, mcp__word-document-server__get_all_comments, mcp__word-document-server__get_comments_by_author, mcp__word-document-server__validate_document_footnotes, mcp__word-document-server__get_document_xml, mcp__word-document-server__list_available_documents, mcp__docx-mcp__get_tracked_changes
 model: sonnet
 ---
 
@@ -155,7 +155,7 @@ print(diff.to_json(indent=2))
 ## What You Do NOT Do
 
 - Never modify the document
-- Never write files (except the Document Map as conversation output)
+- Never write files except the Document Map sidecar (`{doc_dir}/.word-agent/{name}.map.md` — see SKILL.md Step 7; downstream modules read this file instead of re-reading the document)
 - Never perform formatting changes
 - Never start with `get_document_text` — always start with outline/info
 

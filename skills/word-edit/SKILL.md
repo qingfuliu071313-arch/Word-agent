@@ -53,6 +53,21 @@ Word Content Editor modifies text content in Word documents while preserving for
 
 ## Phase 2: Mode Selection
 
+### Pre-check: 文档已含修订时的防混入确认 (MANDATORY)
+
+执行任何**非修订模式**编辑前，先检查文档是否已含修订（来源：word-read Document Map 的
+"Tracked Changes" 节 / `.word-agent/{name}.map.md` sidecar / `mcp__docx-mcp__get_tracked_changes`）：
+
+```
+IF 文档已含 N 处修订 (N > 0) AND 用户请求的不是修订模式:
+  → 必须先警告用户并等待确认：
+    "文档已含 {N} 处修订，直接修改会混入修订流（后续无法区分原有修订与本次改动），
+     是否改用修订模式？(A) 改用修订模式 (B) 仍然直接修改 (C) 取消"
+  → 仅在用户明确选择 B 后才执行非修订编辑
+```
+
+### Mode Selection Rules
+
 ```
 IF user says "从零写" or "新建文档" or "create document" or "write from scratch"
   → New Document Mode (create_document + add_heading + add_paragraph)
@@ -161,7 +176,7 @@ For edits that must show revision marks when word-mcp-live is unavailable:
 
 ```
 1. Unpack document:
-   python scripts/office/unpack.py document.docx unpacked/
+   python3 scripts/office/unpack.py document.docx unpacked/
 
 2. Read target location in unpacked/word/document.xml
 
@@ -172,7 +187,7 @@ For edits that must show revision marks when word-mcp-live is unavailable:
    - Author: "Claude", Date: current ISO timestamp
 
 4. Repack:
-   python scripts/office/pack.py unpacked/ output.docx --original document.docx
+   python3 scripts/office/pack.py unpacked/ output.docx --original document.docx
 ```
 
 **Tracked Changes XML patterns:**

@@ -8,7 +8,7 @@ description: >-
   are needed in sequence.
   Triggers: any ambiguous Word request, multi-step operations, "排版并检查",
   "full preparation", "全流程".
-allowed-tools: Read Bash Glob Grep mcp__word-document-server__get_document_info mcp__word-document-server__get_document_outline mcp__word-document-server__list_available_documents
+allowed-tools: Read Bash Glob Grep mcp__word-document-server__get_document_info mcp__word-document-server__get_document_outline mcp__word-document-server__list_available_documents mcp__word-mcp-live__get_active_document
 metadata:
     version: "1.0.0"
     category: coordination
@@ -80,9 +80,17 @@ Before routing to any module:
      See `references/doc_conversion.md` for details.
    - NO (already .docx) → continue
 
-2. **Document Map check** — Does a Document Map exist in the conversation context?
-   - YES → pass it to the target module
-   - NO → run word-read first to generate one (unless task is word-read itself)
+2. **Document Map check** — 先查落盘的 map 文件（不依赖对话上下文）:
+   ```
+   a. Glob: {文档所在目录}/.word-agent/{文档名去扩展名}.map.md
+   b. 文件存在 → 比较 mtime（Bash 测试 map 是否比 docx 新）:
+      if [ "{dir}/.word-agent/{name}.map.md" -nt "{dir}/{name}.docx" ]; then echo VALID; else echo STALE; fi
+      - VALID（map 的 mtime 晚于 docx 的 mtime）→ map 有效：
+        Read 该文件，并将其内容注入目标模块的 prompt
+      - STALE（docx 在 map 之后被修改过）→ map 已过期 → 派 word-read 重新生成
+   c. 文件不存在 → 派 word-read 先生成（除非任务本身就是 word-read）
+   ```
+   word-read 生成的 map 总是写入上述路径（见 word-read SKILL Step 7），跨会话可复用。
 
 3. **Format Spec check** — Does the task require formatting rules?
    - YES → check if user has provided format requirements

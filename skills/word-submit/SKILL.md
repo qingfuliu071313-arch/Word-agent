@@ -7,7 +7,7 @@ description: >-
   quality checks.
   Triggers: 投稿, 清理, clean copy, submit, 删除批注, 接受修订, 拆分,
   补充材料, 合并, merge, split, 投稿准备.
-allowed-tools: Read Write Edit Bash Glob Grep mcp__word-document-server__get_all_comments mcp__word-document-server__get_document_info mcp__word-document-server__copy_document mcp__word-document-server__protect_document mcp__word-document-server__unprotect_document mcp__word-document-server__get_document_text mcp__word-document-server__get_document_outline mcp__word-document-server__get_paragraph_text_from_document mcp__word-document-server__find_text_in_document mcp__word-document-server__get_document_xml mcp__word-document-server__delete_paragraph mcp__docx-mcp__accept_changes mcp__docx-mcp__reject_changes mcp__docx-mcp__get_tracked_changes mcp__word-mcp-live__delete_comment mcp__word-mcp-live__resolve_comment mcp__word-mcp-live__add_watermark mcp__docx-mcp__remove_watermark mcp__docx-mcp__scrub_pii
+allowed-tools: Read Write Edit Bash Glob Grep mcp__word-document-server__get_all_comments mcp__word-document-server__get_document_info mcp__word-document-server__copy_document mcp__word-document-server__protect_document mcp__word-document-server__unprotect_document mcp__word-document-server__get_document_text mcp__word-document-server__get_document_outline mcp__word-document-server__get_paragraph_text_from_document mcp__word-document-server__find_text_in_document mcp__word-document-server__get_document_xml mcp__word-document-server__delete_paragraph mcp__docx-mcp__accept_changes mcp__docx-mcp__reject_changes mcp__docx-mcp__get_tracked_changes mcp__word-mcp-live__delete_comment mcp__word-mcp-live__resolve_comment mcp__word-mcp-live__add_watermark mcp__docx-mcp__remove_watermark mcp__docx-mcp__scrub_pii mcp__docx-mcp__validate_paraids mcp__docx-mcp__audit_document
 metadata:
     version: "1.0.0"
     category: submission
@@ -59,18 +59,18 @@ Step 1.5: Review tracked changes (selective accept/reject)
   → If docx-mcp unavailable → skip to Step 2 (accept all, legacy path)
 
 Step 2: Accept all tracked changes (if not handled by Step 1.5 Option B/C)
-  → Bash: python scripts/accept_changes.py {copy_path} {clean_path}
-  → This uses the docx skill's accept_changes.py script
+  → Bash: python3 scripts/accept_changes.py {copy_path} {clean_path}
+  → accept_changes.py 是本插件 scripts/ 内的 XML fallback 脚本（接受全部修订）
 
 Step 3: Remove comments (选择性批注管理)
   → User chooses:
     Option A: 删除全部批注 (default)
       → Via XML manipulation:
-         a. Unpack: python scripts/office/unpack.py {clean_path} unpacked/
+         a. Unpack: python3 scripts/office/unpack.py {clean_path} unpacked/
          b. Remove all <w:comment> elements from word/comments.xml
          c. Remove all <w:commentRangeStart>, <w:commentRangeEnd>,
             <w:commentReference> from word/document.xml
-         d. Repack: python scripts/office/pack.py unpacked/ {clean_path}
+         d. Repack: python3 scripts/office/pack.py unpacked/ {clean_path}
     Option B: 仅删除已 resolved 批注
       → get_all_comments → filter resolved → delete each:
          mcp__word-mcp-live__delete_comment(clean_path, comment_id)

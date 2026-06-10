@@ -3,6 +3,11 @@
   "version": "1.0.0",
   "description": "Academic paper Word document agent — formatting, editing, reviewing, and submission preparation",
   "license": "MIT",
+  "author": {
+    "name": "qingfuliu071313-arch"
+  },
+  "repository": "https://github.com/qingfuliu071313-arch/Word-agent",
   "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
   "keywords": ["word", "docx", "academic", "paper", "formatting", "manuscript"]
 }

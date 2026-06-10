@@ -7,7 +7,7 @@ description: >-
   response documents.
   Triggers: 审稿意见, 修订, 审阅, 批注, reviewer comments, revision,
   response to reviewers, point-by-point.
-allowed-tools: Read Write Edit Bash Glob Grep mcp__word-document-server__get_all_comments mcp__word-document-server__get_comments_by_author mcp__word-document-server__get_comments_for_paragraph mcp__word-document-server__get_document_text mcp__word-document-server__get_document_outline mcp__word-document-server__get_paragraph_text_from_document mcp__word-document-server__find_text_in_document mcp__word-document-server__search_and_replace mcp__word-document-server__get_document_xml mcp__word-mcp-live__edit_text mcp__word-mcp-live__insert_text mcp__word-mcp-live__delete_text mcp__word-mcp-live__replace_text mcp__word-mcp-live__add_comment mcp__word-mcp-live__reply_to_comment mcp__word-mcp-live__resolve_comment mcp__word-mcp-live__delete_comment
+allowed-tools: Read Write Edit Bash Glob Grep mcp__word-document-server__get_all_comments mcp__word-document-server__get_comments_by_author mcp__word-document-server__get_comments_for_paragraph mcp__word-document-server__get_document_text mcp__word-document-server__get_document_outline mcp__word-document-server__get_paragraph_text_from_document mcp__word-document-server__find_text_in_document mcp__word-document-server__search_and_replace mcp__word-document-server__get_document_xml mcp__word-mcp-live__edit_text mcp__word-mcp-live__insert_text mcp__word-mcp-live__delete_text mcp__word-mcp-live__replace_text mcp__word-mcp-live__add_comment mcp__word-mcp-live__reply_to_comment mcp__word-mcp-live__resolve_comment mcp__word-mcp-live__delete_comment mcp__word-document-server__create_document mcp__word-document-server__add_paragraph mcp__word-document-server__add_heading
 metadata:
     version: "1.0.0"
     category: review
@@ -30,7 +30,7 @@ Word Reviewer processes reviewer/editor comments, plans a revision strategy for 
 
 ## When NOT to Use
 
-- Self-reviewing manuscript quality → use eco-agent:ecology-review
+- Self-reviewing manuscript quality → 使用通用学术审稿工具或人工评审（本插件不提供稿件质量自审）
 - General content editing without reviewer context → use word-edit
 - Responding to reviewers without Word document changes → handle directly
 
@@ -126,7 +126,7 @@ If word-mcp-live is unavailable, fall back to XML manipulation:
 
 ```bash
 # Unpack document for tracked changes editing
-python scripts/office/unpack.py document.docx unpacked/
+python3 scripts/office/unpack.py document.docx unpacked/
 ```
 
 For each accepted/partially accepted comment:
@@ -135,7 +135,7 @@ For each accepted/partially accepted comment:
 3. Set author="Claude", date=current timestamp
 
 ```bash
-python scripts/office/pack.py unpacked/ revised_document.docx --original document.docx
+python3 scripts/office/pack.py unpacked/ revised_document.docx --original document.docx
 ```
 
 See `../../references/tracked_changes.md` for XML patterns and native mode parameter reference.
@@ -204,7 +204,7 @@ See `../../references/comment_operations.md` for the full comment model and oper
 
 ## Phase 4: Generate Point-by-Point Response
 
-Create a response document using word-document-server MCP tools or the docx skill:
+Create a response document using word-document-server MCP tools (`create_document` → `add_heading` / `add_paragraph`, all declared in allowed-tools) or the docx skill:
 
 ```markdown
 Response to Reviewers
@@ -256,7 +256,14 @@ Response: Corrected. Thank you for catching this.
 
 ## Post-Execution
 
-1. **MANDATORY: Font Normalization** — Run `python3 scripts/normalize_fonts.py "{file_path}" --unify` on all output documents before returning. See `../../references/font_normalization.md`.
+1. **MANDATORY: Font Normalization** — 对带修订标记的修订稿必须使用 `--skip-revisions`（跳过 `w:ins`/`w:del` 内的 run，避免静默改动污染修订记录和删除快照）：
+   ```bash
+   # 修订稿（含 tracked changes）：
+   python3 scripts/normalize_fonts.py "{filename}_revised.docx" --unify --skip-revisions
+   # response 文档（无修订，正常归一化）：
+   python3 scripts/normalize_fonts.py "response_to_reviewers.docx" --unify
+   ```
+   See `../../references/font_normalization.md`.
 
 2. **Output two files:**
    - `{filename}_revised.docx` — manuscript with tracked changes

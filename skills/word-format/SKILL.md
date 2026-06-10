@@ -7,7 +7,7 @@ description: >-
   headers/footers, TOC generation, and CJK mixed-text normalization.
   Triggers: 排版, 格式化, 改格式, 按要求排, format, style, apply formatting,
   目录, 生成目录, TOC, 中英文混排, 标点, 全角半角.
-allowed-tools: Read Write Bash Glob Grep mcp__word-document-server__format_text mcp__word-document-server__create_custom_style mcp__word-document-server__search_and_replace mcp__word-document-server__set_table_width mcp__word-document-server__set_table_column_widths mcp__word-document-server__format_table mcp__word-document-server__highlight_table_header mcp__word-document-server__add_heading mcp__word-document-server__add_page_break mcp__word-document-server__get_document_info mcp__word-document-server__get_document_outline mcp__word-document-server__get_document_text mcp__word-document-server__get_paragraph_text_from_document mcp__word-document-server__find_text_in_document mcp__word-document-server__get_document_xml
+allowed-tools: Read Write Bash Glob Grep mcp__word-document-server__create_custom_style mcp__word-document-server__search_and_replace mcp__word-document-server__set_table_width mcp__word-document-server__set_table_column_widths mcp__word-document-server__format_table mcp__word-document-server__highlight_table_header mcp__word-document-server__add_heading mcp__word-document-server__add_page_break mcp__word-document-server__get_document_info mcp__word-document-server__get_document_outline mcp__word-document-server__get_document_text mcp__word-document-server__get_paragraph_text_from_document mcp__word-document-server__find_text_in_document mcp__word-document-server__get_document_xml
 metadata:
     version: "1.0.0"
     category: formatting
@@ -38,6 +38,77 @@ Word Formatter takes user-provided format requirements and applies them to a Wor
 
 - **Document Map** from word-reader (or will be requested via orchestrator)
 - **Format requirements** from user (Word doc, PDF, or verbal description)
+
+---
+
+## Phase 0: Pre-flight Safety Checks (MANDATORY, before everything else)
+
+1. **文件锁检测** — 确认文档没有被 Word 打开锁定：
+   ```bash
+   python3 scripts/normalize_fonts.py "{file_path}" --check-lock
+   ```
+   - exit code 0 → 未锁定，继续
+   - exit code 2 → 文件被 Word 锁定 → 停止 file 模式写操作，提示用户：
+     "文档正在 Word 中打开。请关闭 Word 后重试，或改用 live 编辑模式（word-mcp-live）。"
+
+2. **已有修订检测** — 检查文档是否已含 tracked changes（来源：Document Map 的
+   "Tracked Changes" 节 / `.word-agent/{name}.map.md` sidecar / `mcp__docx-mcp__get_tracked_changes`）：
+   ```
+   IF 文档已含 N 处修订 (N > 0):
+     → 警告用户并等待确认：
+       "文档已含 {N} 处修订，直接批量改格式会混入修订流（且可能改动修订标记内部的格式快照），
+        是否改用修订模式处理，或先接受/拒绝现有修订后再排版？
+        (A) 先处理修订再排版 (B) 仍然直接排版 (C) 取消"
+     → 仅在用户明确选择 B 后才继续
+   ```
+
+---
+
+## Strategy Selection (Before Phase 1)
+
+Before parsing format requirements, determine which formatting strategy to use:
+
+### Strategy A: Template Injection (Preferred when template .docx provided)
+
+When the user provides a template .docx file with correct style definitions:
+
+1. **Copy source document** as working file
+2. **Transplant styles** — Copy the template's styles.xml into the working file:
+   ```bash
+   python3 scripts/format_document.py "{file_path}" transplant-styles \
+     --template "{template_path}" --page-setup
+   ```
+   This replaces ALL style definitions (Normal, Heading 1-3, etc.) with the template's versions, and optionally copies page setup (margins, size).
+
+3. **Clear direct formatting** — Remove run-level and paragraph-level overrides so content inherits from the transplanted styles:
+   ```bash
+   python3 scripts/format_document.py "{file_path}" clear-direct-format
+   ```
+   Use `--range "start,end"` to target specific sections (e.g., skip cover page).
+
+4. **Verify** — Check that styles propagated correctly. If specific paragraphs need overrides (e.g., references with no indent), apply paragraph-level adjustments.
+
+5. **Font normalization** — Run Phase 4 as usual.
+
+**Why this is preferred:** The template's style definitions are authoritative — they were designed in Word with correct font pairing, spacing, indent, and visual tuning. Transplanting them avoids the error-prone process of manually extracting and re-encoding values from text box annotations.
+
+**Limitations:** If source document uses custom style names not present in the template, those paragraphs lose formatting. Verify style name mapping before transplanting.
+
+### Strategy B: Manual Spec (When no template .docx available)
+
+When format requirements come from verbal description, PDF, or non-template Word doc:
+
+1. Proceed to Phase 1 to parse requirements
+2. Build Format Spec manually
+3. Apply via Phase 3
+
+### Strategy C: Hybrid
+
+When a template provides SOME rules but not all:
+
+1. Transplant styles from template (Strategy A steps 1-3)
+2. Parse remaining rules from text/PDF (Phase 1)
+3. Apply additional rules via `styles` or `paragraph` commands (Phase 3)
 
 ---
 
@@ -166,6 +237,13 @@ Step 2: Style Definitions (handles fonts, sizes, spacing, indent, alignment)
       --font-size 三号 --bold --alignment center --space-before 24pt --space-after 12pt
   → Repeat for Heading 2, Heading 3, Caption, etc.
   → This replaces BOTH font setting AND paragraph formatting in one call per style
+
+Step 2b: Clear Direct Formatting (if needed)
+  → python3 scripts/format_document.py "{file_path}" clear-direct-format
+  → Use --range to target specific sections: --range "44,250" (skip cover page)
+  → IMPORTANT: Direct formatting on paragraphs OVERRIDES style definitions.
+    If styles were modified but paragraphs still look wrong, direct formatting is the cause.
+    Always clear direct formatting after transplanting or modifying styles.
 
 Step 3: Paragraph Overrides (only for paragraphs needing different formatting from their style)
   → python3 scripts/format_document.py "{file_path}" paragraph \

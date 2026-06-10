@@ -57,7 +57,13 @@ Step 3: Format with citeproc-py
 Step 4: Write to document
   → replace_paragraph_block_below_header: replace content under "参考文献" or "References"
   → Or add_paragraph for each reference entry
-  → format_text: apply reference font/size per Format Spec
+  → Apply reference font/size per Format Spec via STYLE definitions (style-first, 禁止 run 级直接格式化):
+     Bash: python3 scripts/format_document.py "{file_path}" styles \
+       --name "Bibliography" --cn-font 宋体 --en-font "Times New Roman" \
+       --font-size 五号 --line-spacing 1.0
+     若参考文献段落使用 Normal 样式而需单独行距/字号，用段落范围覆盖:
+     Bash: python3 scripts/format_document.py "{file_path}" paragraph \
+       --style Normal --range "{ref_start},{ref_end}" --line-spacing 1.0
 ```
 
 ### Without Zotero (Manual Formatting)
@@ -71,6 +77,24 @@ Step 4: Replace the reference list in the document
 
 ### Using citeproc-py
 
+**Step 0 (MANDATORY): Check that the CSL file exists before running citeproc-py.**
+
+CSL files live in `{plugin_root}/references/csl/` (expected: `china-national-standard-gb-t-7714-2015-numeric.csl`, `apa.csl`). Check with Glob/Bash first:
+
+```
+IF references/csl/{style}.csl 不存在:
+  1. 提示用户下载地址:
+     - GB/T 7714-2015 顺序编码制:
+       https://raw.githubusercontent.com/citation-style-language/styles/master/china-national-standard-gb-t-7714-2015-numeric.csl
+     - APA 7th:
+       https://raw.githubusercontent.com/citation-style-language/styles/master/apa.csl
+     - 其他样式: https://www.zotero.org/styles 搜索下载
+     下载后放入插件的 references/csl/ 目录（保持原文件名）。
+  2. 降级为手工格式化（"Without Zotero (Manual Formatting)" 流程）:
+     按目标引文样式的规则逐条重排参考文献条目，不经过 citeproc-py。
+  3. 不要在 CSL 文件缺失时调用 citeproc-py —— 会直接抛 FileNotFoundError。
+```
+
 ```bash
 python3 << 'PYEOF'
 import json
@@ -78,8 +102,8 @@ from citeproc import CitationStylesStyle, CitationStylesBibliography
 from citeproc import Citation, CitationItem
 from citeproc.source.json import CiteProcJSON
 
-# Load CSL style
-style = CitationStylesStyle('references/csl/gb-t-7714-2015-numeric.csl')
+# Load CSL style (path relative to plugin root; verify existence first — see Step 0)
+style = CitationStylesStyle('references/csl/china-national-standard-gb-t-7714-2015-numeric.csl')
 
 # Reference data (from Zotero or manual input)
 references = [

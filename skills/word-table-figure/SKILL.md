@@ -5,7 +5,7 @@ description: >-
   tables, formats existing tables, inserts images with captions, and manages
   numbering consistency.
   Triggers: 表格, 三线表, 图片, 插图, 题注, table, figure, image, caption.
-allowed-tools: Read Bash Glob Grep mcp__word-document-server__add_table mcp__word-document-server__format_table mcp__word-document-server__format_table_cell_text mcp__word-document-server__set_table_width mcp__word-document-server__set_table_column_widths mcp__word-document-server__auto_fit_table_columns mcp__word-document-server__merge_table_cells_horizontal mcp__word-document-server__merge_table_cells_vertical mcp__word-document-server__highlight_table_header mcp__word-document-server__set_table_cell_shading mcp__word-document-server__set_table_cell_alignment mcp__word-document-server__set_table_cell_padding mcp__word-document-server__set_table_alignment_all mcp__word-document-server__apply_table_alternating_rows mcp__word-document-server__add_picture mcp__word-document-server__add_paragraph mcp__word-document-server__format_text mcp__word-document-server__find_text_in_document mcp__word-document-server__get_paragraph_text_from_document mcp__word-mcp-live__insert_equation
+allowed-tools: Read Bash Glob Grep mcp__word-document-server__add_table mcp__word-document-server__format_table mcp__word-document-server__format_table_cell_text mcp__word-document-server__set_table_width mcp__word-document-server__set_table_column_widths mcp__word-document-server__auto_fit_table_columns mcp__word-document-server__merge_table_cells_horizontal mcp__word-document-server__merge_table_cells_vertical mcp__word-document-server__highlight_table_header mcp__word-document-server__set_table_cell_shading mcp__word-document-server__set_table_cell_alignment mcp__word-document-server__set_table_cell_padding mcp__word-document-server__set_table_alignment_all mcp__word-document-server__apply_table_alternating_rows mcp__word-document-server__add_picture mcp__word-document-server__add_paragraph mcp__word-document-server__create_custom_style mcp__word-document-server__find_text_in_document mcp__word-document-server__get_paragraph_text_from_document mcp__word-mcp-live__insert_equation
 metadata:
     version: "1.0.0"
     category: editing
@@ -47,9 +47,13 @@ User provides:
 ### Process
 
 ```
-Step 1: Add caption paragraph
-  → add_paragraph: "表{n} {caption_text}"
-  → format_text: apply caption font per Format Spec
+Step 1: Add caption paragraph (style-first — use the Caption style, never run-level direct formatting)
+  → add_paragraph: "表{n} {caption_text}", style="Caption"
+  → Ensure the Caption style matches the Format Spec (one call covers ALL captions):
+     Bash: python3 scripts/format_document.py "{file_path}" styles \
+       --name Caption --cn-font 宋体 --en-font "Times New Roman" \
+       --font-size 五号 --alignment center
+     (或在 Caption 样式不存在时用 create_custom_style 创建)
 
 Step 2: Create table
   → add_table: create table with header + data rows
@@ -64,6 +68,9 @@ Step 4: Format content
   → set_table_cell_alignment: center header, left/right-align data as needed
   → set_table_cell_padding: add consistent internal padding
   → format_table_cell_text: apply font per Format Spec
+    （注：这是“表格单元格内文字”的特例 —— 单元格文字不走段落样式体系，
+     允许使用 format_table_cell_text；这不属于被禁止的 format_text 直接格式化。
+     操作完成后仍必须执行 Post-Execution 的字体归一化。）
 
 Step 5: Set dimensions
   → set_table_width: full content width
@@ -110,9 +117,12 @@ No other horizontal lines between data rows.
 Step 1: Insert image
   → add_picture: insert at specified location with dimensions
 
-Step 2: Add caption below
-  → add_paragraph: "图{n} {caption_text}"
-  → format_text: apply caption font per Format Spec
+Step 2: Add caption below (style-first — use the Caption style)
+  → add_paragraph: "图{n} {caption_text}", style="Caption"
+  → Caption 样式不符合 Format Spec 时，统一调整样式定义（同 Feature A Step 1）:
+     Bash: python3 scripts/format_document.py "{file_path}" styles \
+       --name Caption --cn-font 宋体 --en-font "Times New Roman" \
+       --font-size 五号 --alignment center
 ```
 
 ## Feature D: Cell Merging

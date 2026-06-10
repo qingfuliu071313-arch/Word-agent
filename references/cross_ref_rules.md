@@ -12,6 +12,10 @@
 ```
 图{n}          → 图1, 图2, 图3
 图 {n}         → 图 1, 图 2（空格变体）
+图{c}-{n}      → 图2-1（章节式编号，学位论文常用）
+图{c}.{n}      → 图2.3（章节式编号点号变体，含全角 ．）
+图S{n}         → 图S1（补充材料编号）
+图A{n}         → 图A1（附录编号）
 如图{n}所示    → 如图1所示
 见图{n}        → 见图1
 (图{n})        → (图1)
@@ -23,6 +27,7 @@
 Figure {n}     → Figure 1, Figure 2
 Fig. {n}       → Fig. 1, Fig. 2
 Fig.{n}        → Fig.1（无空格变体）
+Figure S{n}    → Figure S1（补充材料编号）
 Figs. {n}-{m}  → Figs. 1-3（范围引用）
 (Fig. {n})     → (Fig. 1)
 ```
@@ -41,6 +46,10 @@ Fig. {n}. {title}     → Fig. 1. Description
 ```
 表{n}          → 表1, 表2
 表 {n}         → 表 1, 表 2
+表{c}-{n}      → 表2-1（章节式编号）
+表{c}.{n}      → 表2.3（章节式编号点号变体）
+表S{n}         → 表S1（补充材料编号）
+表A{n}         → 表A1（附录编号）
 见表{n}        → 见表1
 如表{n}所示    → 如表1所示
 (表{n})        → (表1)
@@ -50,6 +59,7 @@ Fig. {n}. {title}     → Fig. 1. Description
 **英文引用模式：**
 ```
 Table {n}      → Table 1, Table 2
+Table S{n}     → Table S1（补充材料编号）
 Tables {n}-{m} → Tables 1-3
 (Table {n})    → (Table 1)
 ```
@@ -67,6 +77,8 @@ Table {n}. {title}    → Table 1. ANOVA results
 ```
 式({n})        → 式(1), 式(2)
 式（{n}）      → 式（1）
+式({c}.{n})    → 式(3.2)（章节式编号）
+式({c}-{n})    → 式(2-1)（章节式编号连字符变体）
 公式({n})      → 公式(1)
 Eq. ({n})      → Eq. (1)
 Equation ({n}) → Equation (1)
@@ -166,7 +178,8 @@ Chapter {n}    → Chapter 1
 ## 检查执行流程
 
 ```
-1. 用 get_document_text 获取全文（此场景确实需要全文）
+1. Python 脚本内直接从 docx 文件读取全文（docx2python 或 python-docx），
+   全文不进入对话上下文；超大文档按 Document Map 章节范围分章扫描后合并结果
 2. 用正则提取所有"定义"位置和编号
 3. 用正则提取所有"引用"位置和编号
 4. 按 R1-R7 逐条检查
@@ -179,26 +192,54 @@ Chapter {n}    → Chapter 1
 ## 正则表达式参考
 
 ```python
-# 中文图引用
-re.findall(r'(?:如)?图\s*(\d+)', text)
+# 通用编号模式：普通编号(1) + 章节式编号(2-1, 2.3, 2．3)
+NUM = r'(\d+(?:[-.．]\d+)?)'
+
+# 中文图引用（含章节式编号: 图2-1, 图2.3）
+re.findall(r'(?:如)?图\s*' + NUM, text)
 
 # 英文图引用
-re.findall(r'(?:Figure|Fig\.)\s*(\d+)', text)
+re.findall(r'(?:Figure|Fig\.)\s*' + NUM, text)
 
-# 中文表引用
-re.findall(r'(?:如|见)?表\s*(\d+)', text)
+# 补充材料图引用（独立命名空间）
+re.findall(r'(?:如)?图\s*S(\d+)', text)
+re.findall(r'(?:Figure|Fig\.)\s*S(\d+)', text)
+
+# 附录图引用（独立命名空间）
+re.findall(r'(?:如)?图\s*A(\d+)', text)
+
+# 中文表引用（含章节式编号）
+re.findall(r'(?:如|见)?表\s*' + NUM, text)
 
 # 英文表引用
-re.findall(r'Table\s*(\d+)', text)
+re.findall(r'Table\s*' + NUM, text)
 
-# 公式引用
-re.findall(r'(?:式|公式|Eq\.|Equation)\s*[（(]\s*(\d+)\s*[)）]', text)
+# 补充材料表引用
+re.findall(r'(?:如|见)?表\s*S(\d+)', text)
+re.findall(r'Table\s*S(\d+)', text)
+
+# 附录表引用
+re.findall(r'(?:如|见)?表\s*A(\d+)', text)
+
+# 公式引用（含章节式编号: 式(3.2), 式(2-1)）
+re.findall(r'(?:式|公式|Eq\.|Equation)\s*[（(]\s*' + NUM + r'\s*[)）]', text)
 
 # 图题定义（通常在段落开头）
-re.findall(r'^图\s*(\d+)[\s.．]', text, re.MULTILINE)
-re.findall(r'^(?:Figure|Fig\.)\s*(\d+)[\s.]', text, re.MULTILINE)
+re.findall(r'^图\s*' + NUM + r'[\s.．:：]', text, re.MULTILINE)
+re.findall(r'^(?:Figure|Fig\.)\s*' + NUM + r'[\s.:]', text, re.MULTILINE)
+re.findall(r'^图\s*S(\d+)[\s.．:：]', text, re.MULTILINE)
+re.findall(r'^(?:Figure|Fig\.)\s*S(\d+)[\s.:]', text, re.MULTILINE)
+re.findall(r'^图\s*A(\d+)[\s.．:：]', text, re.MULTILINE)
 
 # 表题定义
-re.findall(r'^表\s*(\d+)[\s.．]', text, re.MULTILINE)
-re.findall(r'^Table\s*(\d+)[\s.]', text, re.MULTILINE)
+re.findall(r'^表\s*' + NUM + r'[\s.．:：]', text, re.MULTILINE)
+re.findall(r'^Table\s*' + NUM + r'[\s.:]', text, re.MULTILINE)
+re.findall(r'^表\s*S(\d+)[\s.．:：]', text, re.MULTILINE)
+re.findall(r'^Table\s*S(\d+)[\s.:]', text, re.MULTILINE)
+re.findall(r'^表\s*A(\d+)[\s.．:：]', text, re.MULTILINE)
+
+# 公式编号定义（行末右对齐，含章节式）
+re.findall(r'[（(]\s*' + NUM + r'\s*[)）]\s*$', text, re.MULTILINE)
 ```
+
+**命名空间说明**：普通/章节式编号、S（补充材料）、A（附录）是三个独立命名空间。R1-R7 各规则（存在性、连续性、唯一性等）在各命名空间内分别检查；全角点号 `．` 在比较前归一化为 `.`。

@@ -7,7 +7,7 @@ description: >-
   produces structured diff reports. Triggers: 读取, 分析, 对比, 比较, read,
   analyze, compare, diff, 看看这个文档, 这两版有什么区别.
   Not for editing (word-edit) or formatting (word-format).
-allowed-tools: Read Bash Glob Grep mcp__word-document-server__get_document_info mcp__word-document-server__get_document_outline mcp__word-document-server__get_document_text mcp__word-document-server__get_paragraph_text_from_document mcp__word-document-server__find_text_in_document mcp__word-document-server__get_all_comments mcp__word-document-server__get_comments_by_author mcp__word-document-server__validate_document_footnotes mcp__word-document-server__get_document_xml mcp__word-document-server__list_available_documents mcp__docx-mcp__get_tracked_changes
+allowed-tools: Read Write Bash Glob Grep mcp__word-document-server__get_document_info mcp__word-document-server__get_document_outline mcp__word-document-server__get_document_text mcp__word-document-server__get_paragraph_text_from_document mcp__word-document-server__find_text_in_document mcp__word-document-server__get_all_comments mcp__word-document-server__get_comments_by_author mcp__word-document-server__validate_document_footnotes mcp__word-document-server__get_document_xml mcp__word-document-server__list_available_documents mcp__docx-mcp__get_tracked_changes
 metadata:
     version: "1.0.0"
     category: analysis
@@ -251,9 +251,22 @@ Compile all gathered information into the standard Document Map format:
 (empty section if no issues)
 ```
 
+### Step 7: Persist the Document Map to Disk (MANDATORY)
+
+Write the assembled Document Map to a sidecar file next to the document (use the Write tool):
+
+```
+路径规则: {文档所在目录}/.word-agent/{文档名去扩展名}.map.md
+示例:     /path/to/paper.docx → /path/to/.word-agent/paper.map.md
+```
+
+1. Write the full Document Map markdown to that path (the Write tool creates `.word-agent/` automatically)
+2. **下游模块优先读此文件，不重读文档** — downstream modules (word-format, word-edit, word-check, ...) MUST Read this file first instead of re-reading the document
+3. 失效判定靠 mtime：map 文件的 mtime 晚于 .docx 的 mtime 才有效。任何模块对 .docx 的写操作会让 docx 的 mtime 变新，map 自动视为过期（无需手动标记），由 orchestrator 在下次任务时派 word-read 重新生成
+
 ### Output
 
-Present the Document Map to the user. This map is also passed to downstream modules via conversation context.
+Present the Document Map to the user, and confirm the sidecar file path (e.g. "Document Map 已写入 {dir}/.word-agent/{name}.map.md，下游模块将直接读取该文件"). The map is delivered to downstream modules via this file — not via conversation context alone.
 
 ---
 
@@ -346,7 +359,7 @@ When called by a downstream module for specific content:
 1. **Never call `get_document_text` as the first step** — always start with `get_document_info` + `get_document_outline`
 2. **Use `docx2python` for deep analysis** — one Python call replaces dozens of MCP calls
 3. **Sample formatting, don't scan everything** — read representative paragraphs, not all paragraphs
-4. **Cache the Document Map** — downstream modules reference it from context, never regenerate
+4. **Cache the Document Map** — the map is persisted to `{doc_dir}/.word-agent/{name}.map.md` (Step 7); downstream modules Read that file, never regenerate (unless the docx mtime is newer than the map's)
 5. **In Compare Mode, reuse existing maps** — if one document was already analyzed, don't re-analyze it
 
 ## Shared Resources

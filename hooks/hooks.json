@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/qingfu/Desktop/Claude项目管理/Word-agent/hooks/word-agent-router.sh",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/word-agent-router.sh",
             "timeout": 10
           }
         ]

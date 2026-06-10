@@ -8,7 +8,7 @@ description: >-
   Triggers: 排版, 格式化, 改格式, 按要求排, format, style, apply formatting,
   目录, 生成目录, TOC, 中英文混排, 标点, 全角半角.
   Not for content editing (word-edit) or quality checking (word-check).
-tools: Read, Write, Bash, Glob, Grep, mcp__word-document-server__format_text, mcp__word-document-server__create_custom_style, mcp__word-document-server__search_and_replace, mcp__word-document-server__set_table_width, mcp__word-document-server__set_table_column_widths, mcp__word-document-server__format_table, mcp__word-document-server__highlight_table_header, mcp__word-document-server__add_heading, mcp__word-document-server__add_page_break, mcp__word-document-server__get_document_info, mcp__word-document-server__get_document_outline, mcp__word-document-server__get_document_text, mcp__word-document-server__get_paragraph_text_from_document, mcp__word-document-server__find_text_in_document, mcp__word-document-server__get_document_xml
+tools: Read, Write, Bash, Glob, Grep, mcp__word-document-server__create_custom_style, mcp__word-document-server__search_and_replace, mcp__word-document-server__set_table_width, mcp__word-document-server__set_table_column_widths, mcp__word-document-server__format_table, mcp__word-document-server__highlight_table_header, mcp__word-document-server__add_heading, mcp__word-document-server__add_page_break, mcp__word-document-server__get_document_info, mcp__word-document-server__get_document_outline, mcp__word-document-server__get_document_text, mcp__word-document-server__get_paragraph_text_from_document, mcp__word-document-server__find_text_in_document, mcp__word-document-server__get_document_xml
 model: sonnet
 ---
 
@@ -58,11 +58,11 @@ Use `search_and_replace` with regex patterns for batch normalization.
 
 ## Batch Operation Strategy
 
-Group changes by type, not by location:
-1. Page setup (margins, size, orientation) — one operation
-2. Heading styles (all levels) — create/update styles, then apply
-3. Body font/spacing — batch format_text calls
-4. Special elements (captions, references) — targeted format_text
+Group changes by type, not by location (style-first — all formatting goes through style definitions via `scripts/format_document.py`):
+1. Page setup (margins, size, orientation) — `format_document.py page-setup`, one operation
+2. Heading styles (all levels) — `format_document.py styles --name "Heading N" ...`, one call per style
+3. Body font/spacing — `format_document.py styles --name Normal ...`, one call propagates to all body paragraphs
+4. Special elements (captions, references) — `format_document.py styles --name Caption ...` / `paragraph --range` overrides
 5. CJK normalization — regex-based search_and_replace passes
 6. Headers/footers — XML if needed
 7. TOC — XML field code insertion
