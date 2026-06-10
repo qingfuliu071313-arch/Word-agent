@@ -3,13 +3,15 @@
 format_document.py — Academic paper formatting engine for Word documents.
 
 Handles paragraph-level and page-level formatting that MCP tools cannot:
-  page-setup      Page size, margins, orientation
-  styles          Modify built-in style definitions (font, spacing, indent)
-  paragraph       Apply paragraph formatting by style name or index range
-  header-footer   Header/footer content and page numbers
-  section         Section breaks and per-section formatting
-  toc             Insert Table of Contents field
-  apply-spec      Apply all formatting from a JSON spec file
+  page-setup           Page size, margins, orientation
+  styles               Modify built-in style definitions (font, spacing, indent)
+  paragraph            Apply paragraph formatting by style name or index range
+  header-footer        Header/footer content and page numbers
+  section              Section breaks and per-section formatting
+  toc                  Insert Table of Contents field
+  apply-spec           Apply all formatting from a JSON spec file
+  clear-direct-format  Remove direct formatting; paragraphs inherit from styles only
+  transplant-styles    Copy styles.xml from a template document
 
 Safety: creates backup before any modification, atomic write, file lock detection.
 """
@@ -77,6 +79,18 @@ CN_FONT_PAIRS = {
     "方正楷体": "Times New Roman", "方正黑体": "Arial",
 }
 
+# Reverse pairing: given an English font, pick the conventional Chinese partner.
+# (CN_FONT_PAIRS is keyed by Chinese font, so it cannot answer this question.)
+EN_FONT_PAIRS = {
+    "Times New Roman": "宋体",
+    "Arial": "黑体",
+    "Calibri": "宋体",
+    "Cambria": "宋体",
+    "Georgia": "宋体",
+    "Helvetica": "黑体",
+    "Verdana": "黑体",
+}
+
 
 # ─── Utility functions ───────────────────────────────────────────────────────
 
@@ -118,13 +132,20 @@ def parse_margins(margin_str):
 
 
 def check_file_lock(filepath):
-    """Check if a Word lock file exists (indicating the file is open in Word)."""
+    """Check if a Word owner file exists (indicating the file is open in Word).
+
+    Word names the owner file '~$' + the document name with its first one or
+    two characters removed (depending on name length), so all variants are
+    checked."""
     p = Path(filepath)
-    lock_file = p.parent / f"~${p.name}"
-    if lock_file.exists():
-        print(f"ERROR: File is locked by Word (lock file: {lock_file})", file=sys.stderr)
-        print("Close the document in Word before running this script.", file=sys.stderr)
-        sys.exit(2)
+    name = p.name
+    candidates = {f"~${name}", f"~${name[1:]}", f"~${name[2:]}"}
+    for cand in candidates:
+        lock_file = p.parent / cand
+        if lock_file.exists():
+            print(f"ERROR: File is locked by Word (lock file: {lock_file})", file=sys.stderr)
+            print("Close the document in Word before running this script.", file=sys.stderr)
+            sys.exit(2)
 
 
 def create_backup(filepath):
@@ -172,7 +193,11 @@ def set_rfonts(element, cn_font=None, en_font=None):
     rPr = element.find(qn('w:rPr'))
     if rPr is None:
         rPr = OxmlElement('w:rPr')
-        element.insert(0, rPr)
+        if element.tag == qn('w:style'):
+            # In CT_Style, rPr comes after name/basedOn/pPr — never first.
+            element.append(rPr)
+        else:
+            element.insert(0, rPr)
 
     rFonts = rPr.find(qn('w:rFonts'))
     if rFonts is None:
@@ -277,9 +302,10 @@ class FormatEngine:
             set_rfonts(style.element, cn_font=cn_font, en_font=en_font)
             self._log(f"font.eastAsia → {cn_font}")
         elif en_font:
-            auto_cn = CN_FONT_PAIRS.get(en_font)
+            auto_cn = EN_FONT_PAIRS.get(en_font)
             if auto_cn:
                 set_rfonts(style.element, cn_font=auto_cn, en_font=en_font)
+                self._log(f"font.eastAsia → {auto_cn} (auto-paired)")
 
         if font_size:
             style.font.size = parse_size(font_size)
@@ -368,7 +394,7 @@ class FormatEngine:
                 if not (start <= i <= end):
                     continue
             if style_filter:
-                if p.style and p.style.name != style_filter:
+                if not p.style or p.style.name != style_filter:
                     continue
             targets.append((i, p))
 
@@ -476,13 +502,20 @@ class FormatEngine:
                 self._log(f"{label}: footer → text='{footer_text or ''}', page_number={page_number}")
 
     def _split_font(self, font_str):
-        """Split 'cn_font,en_font' or return (font, auto_pair)."""
+        """Split 'cn_font,en_font' into a (cn, en) pair.
+
+        A single font name is auto-paired: a Chinese font gets its conventional
+        English partner and vice versa, so an English font never lands in
+        w:eastAsia."""
         if "," in font_str:
             parts = [f.strip() for f in font_str.split(",")]
             return parts[0], parts[1]
         f = font_str.strip()
-        pair = CN_FONT_PAIRS.get(f, f)
-        return f, pair
+        if f in CN_FONT_PAIRS:
+            return f, CN_FONT_PAIRS[f]
+        if f in EN_FONT_PAIRS:
+            return EN_FONT_PAIRS[f], f
+        return f, f
 
     def _insert_page_number(self, paragraph, font_str=None, size_str=None):
         """Insert a PAGE field code into a paragraph."""
@@ -718,6 +751,181 @@ class FormatEngine:
                 title=toc.get("title", "目录"),
             )
 
+    # ── clear direct formatting ──────────────────────────────────────────
+
+    # Visual-formatting properties that may be stripped so styles take over.
+    # Everything NOT listed is preserved — notably pStyle, numPr, sectPr
+    # (section breaks live inside pPr), framePr, and the paragraph-mark rPr's
+    # revision markers (w:ins/w:del).
+    _PPR_FORMAT_TAGS = (
+        'w:jc', 'w:ind', 'w:spacing', 'w:keepNext', 'w:keepLines',
+        'w:pageBreakBefore', 'w:widowControl', 'w:shd', 'w:pBdr', 'w:tabs',
+        'w:wordWrap', 'w:overflowPunct', 'w:topLinePunct', 'w:autoSpaceDE',
+        'w:autoSpaceDN', 'w:adjustRightInd', 'w:snapToGrid',
+        'w:contextualSpacing', 'w:mirrorIndents', 'w:textAlignment',
+        'w:outlineLvl', 'w:kinsoku',
+    )
+    # Run-level visual properties. rStyle (FootnoteReference/Hyperlink…),
+    # vertAlign (superscript m², footnote marks), lang, vanish (hidden field
+    # text), and revision markers are all preserved.
+    _RPR_FORMAT_TAGS = (
+        'w:rFonts', 'w:b', 'w:bCs', 'w:i', 'w:iCs', 'w:sz', 'w:szCs',
+        'w:color', 'w:u', 'w:strike', 'w:dstrike', 'w:caps', 'w:smallCaps',
+        'w:spacing', 'w:w', 'w:kern', 'w:position', 'w:highlight', 'w:shd',
+        'w:bdr', 'w:em', 'w:effect', 'w:outline', 'w:shadow', 'w:emboss',
+        'w:imprint',
+    )
+
+    @staticmethod
+    def _strip_format_children(props_el, tags):
+        """Remove the listed formatting children from a pPr/rPr element."""
+        removed = False
+        for tag in tags:
+            for child in props_el.findall(qn(tag)):
+                props_el.remove(child)
+                removed = True
+        return removed
+
+    @staticmethod
+    def _inside_revision(el):
+        """True if the element sits inside a tracked-change container."""
+        rev_tags = {qn('w:ins'), qn('w:del'), qn('w:moveFrom'), qn('w:moveTo')}
+        return any(anc.tag in rev_tags for anc in el.iterancestors())
+
+    def clear_direct_formatting(self, index_range=None, style_filter=None):
+        """Remove direct visual-formatting overrides so paragraphs inherit
+        from their styles.
+
+        Only known formatting properties are stripped (blacklist). Preserved:
+        pStyle, numPr, sectPr, bookmarks, character styles (rStyle),
+        vertAlign, field/hyperlink structure, and tracked changes — runs
+        inside w:ins/w:del are left untouched so revision content is not
+        silently altered."""
+        count = 0
+        skipped_rev = 0
+        for i, para in enumerate(self.doc.paragraphs):
+            if index_range and not (index_range[0] <= i <= index_range[1]):
+                continue
+            if style_filter and (not para.style or para.style.name != style_filter):
+                continue
+
+            changed = False
+            pPr = para._element.find(qn('w:pPr'))
+            if pPr is not None:
+                if self._strip_format_children(pPr, self._PPR_FORMAT_TAGS):
+                    changed = True
+                # Paragraph-mark run properties: strip visuals, keep w:ins/w:del.
+                mark_rPr = pPr.find(qn('w:rPr'))
+                if mark_rPr is not None:
+                    if self._strip_format_children(mark_rPr, self._RPR_FORMAT_TAGS):
+                        changed = True
+
+            # All runs in the paragraph, including those nested in hyperlinks
+            # and smart tags — but never inside tracked-change containers.
+            for r in para._element.findall(f'.//{qn("w:r")}'):
+                if self._inside_revision(r):
+                    skipped_rev += 1
+                    continue
+                rPr = r.find(qn('w:rPr'))
+                if rPr is None:
+                    continue
+                if self._strip_format_children(rPr, self._RPR_FORMAT_TAGS):
+                    changed = True
+                if len(rPr) == 0:
+                    r.remove(rPr)
+
+            if changed:
+                count += 1
+
+        self._log(f"Cleared direct formatting from {count} paragraphs")
+        if skipped_rev:
+            self._log(f"Skipped {skipped_rev} runs inside tracked changes (preserved)")
+
+    # ── transplant styles ─────────────────────────────────────────────────
+
+    @staticmethod
+    def transplant_styles(target_path, template_path, copy_page_setup=False):
+        """Replace styles.xml in target with template's styles.xml.
+        Optionally copies page setup (section properties) from template's last section.
+        This is a zip-level operation — call BEFORE opening with FormatEngine
+        (main() handles this command before constructing the engine)."""
+        with zipfile.ZipFile(template_path, 'r') as zt:
+            template_styles = zt.read('word/styles.xml')
+            template_doc_xml = zt.read('word/document.xml') if copy_page_setup else None
+
+        # Warn about styleIds the target references but the template lacks —
+        # Word silently falls back to Normal for those (headings lose
+        # outlineLvl, TOC breaks), so surface it before it bites.
+        with zipfile.ZipFile(target_path, 'r') as zin:
+            target_doc_xml = zin.read('word/document.xml')
+        import re as _re
+        used_ids = set(m.group(1).decode() for m in _re.finditer(
+            rb'<w:(?:pStyle|rStyle|tblStyle) w:val="([^"]+)"', target_doc_xml))
+        template_ids = set(m.group(1).decode() for m in _re.finditer(
+            rb'<w:style [^>]*w:styleId="([^"]+)"', template_styles))
+        missing = used_ids - template_ids
+        if missing:
+            print(f"[transplant-styles] WARNING: target uses {len(missing)} styleId(s) "
+                  f"missing from template (will fall back to Normal): "
+                  f"{', '.join(sorted(missing)[:10])}", file=sys.stderr)
+
+        # Write next to the target so the final rename is atomic.
+        p = Path(target_path)
+        fd, temp = tempfile.mkstemp(suffix='.docx', dir=p.parent)
+        os.close(fd)
+        try:
+            with zipfile.ZipFile(target_path, 'r') as zin:
+                with zipfile.ZipFile(temp, 'w', zipfile.ZIP_DEFLATED) as zout:
+                    for item in zin.namelist():
+                        if item == 'word/styles.xml':
+                            zout.writestr(item, template_styles)
+                        elif item == 'word/document.xml' and copy_page_setup:
+                            target_xml = zin.read(item)
+                            target_xml = FormatEngine._copy_section_props(
+                                target_xml, template_doc_xml)
+                            zout.writestr(item, target_xml)
+                        else:
+                            zout.writestr(item, zin.read(item))
+            if not verify_docx(temp):
+                os.unlink(temp)
+                print("ERROR: transplant aborted — output failed verification.", file=sys.stderr)
+                sys.exit(1)
+            os.replace(temp, target_path)
+        except Exception:
+            if os.path.exists(temp):
+                os.unlink(temp)
+            raise
+        print(f"[transplant-styles] Copied styles.xml from: {template_path}")
+        if copy_page_setup:
+            print(f"[transplant-styles] Copied page setup from template")
+        print(f"[transplant-styles] Output: {target_path}")
+
+    @staticmethod
+    def _copy_section_props(target_xml_bytes, template_xml_bytes):
+        """Replace the body-level sectPr in target with the template's.
+
+        Done byte-surgically on the original XML so the declaration, root
+        namespace declarations and everything else stay untouched. Header/
+        footer references are stripped from the copied sectPr because their
+        r:id values belong to the template's rels file, not the target's."""
+        import re
+
+        pat = re.compile(rb'<w:sectPr\b[^>]*(?:/>|>.*?</w:sectPr>)', re.DOTALL)
+        t_matches = list(pat.finditer(template_xml_bytes))
+        s_matches = list(pat.finditer(target_xml_bytes))
+        if not t_matches or not s_matches:
+            print("  WARNING: sectPr not found; page setup not copied.", file=sys.stderr)
+            return target_xml_bytes
+
+        # The body-level sectPr is the last one in document order.
+        tmpl_sect = t_matches[-1].group(0)
+        tmpl_sect = re.sub(
+            rb'<w:(?:headerReference|footerReference)\b[^>]*/>', b'', tmpl_sect)
+
+        last = s_matches[-1]
+        return (target_xml_bytes[:last.start()] + tmpl_sect
+                + target_xml_bytes[last.end():])
+
     # ── report ────────────────────────────────────────────────────────────
 
     def report(self):
@@ -833,6 +1041,19 @@ Examples:
     ap = sub.add_parser("apply-spec", help="Apply all formatting from a JSON spec file")
     ap.add_argument("--spec", required=True, help="Path to JSON format spec file")
 
+    # clear-direct-format
+    cdf = sub.add_parser("clear-direct-format",
+                         help="Remove direct formatting overrides; paragraphs inherit from styles only")
+    cdf.add_argument("--range", help="Paragraph index range: 'start,end' (0-based)")
+    cdf.add_argument("--style", help="Only affect paragraphs with this style name")
+
+    # transplant-styles
+    ts = sub.add_parser("transplant-styles",
+                        help="Copy styles.xml from a template document into this file")
+    ts.add_argument("--template", required=True, help="Path to template .docx")
+    ts.add_argument("--page-setup", action="store_true",
+                    help="Also copy page setup (margins, size) from template")
+
     return parser
 
 
@@ -843,6 +1064,20 @@ def main():
     if not os.path.exists(args.file):
         print(f"ERROR: File not found: {args.file}", file=sys.stderr)
         sys.exit(1)
+
+    # transplant-styles is a zip-level operation and must run BEFORE the
+    # document is loaded into python-docx — otherwise a later engine.save()
+    # would write the pre-transplant in-memory copy back and undo it.
+    if args.command == "transplant-styles":
+        if not os.path.exists(args.template):
+            print(f"ERROR: Template not found: {args.template}", file=sys.stderr)
+            sys.exit(1)
+        check_file_lock(args.file)
+        if not args.no_backup:
+            create_backup(args.file)
+        FormatEngine.transplant_styles(
+            args.file, args.template, copy_page_setup=args.page_setup)
+        return
 
     engine = FormatEngine(args.file, backup=not args.no_backup)
 
@@ -899,6 +1134,14 @@ def main():
 
     elif args.command == "apply-spec":
         engine.apply_spec(args.spec)
+
+    elif args.command == "clear-direct-format":
+        idx_range = None
+        if args.range:
+            parts = args.range.split(",")
+            idx_range = (int(parts[0]), int(parts[1]))
+        engine.clear_direct_formatting(
+            index_range=idx_range, style_filter=args.style)
 
     engine.save()
     engine.report()

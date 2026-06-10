@@ -18,11 +18,13 @@ Examples:
 import zipfile
 import xml.etree.ElementTree as ET
 import os
+import shutil
 import sys
 import argparse
 import tempfile
 import json
 import re
+from datetime import datetime
 
 W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
 W = f'{{{W_NS}}}'
@@ -82,11 +84,58 @@ FONT_PAIRS_EN_TO_CN = {
     'Courier New': '宋体',
 }
 
+# Fonts that must never be unified away: symbol fonts would turn their
+# characters into garbage, monospace fonts are deliberate (code blocks).
+PRESERVE_FONTS = {
+    'Symbol', 'Wingdings', 'Wingdings 2', 'Wingdings 3', 'Webdings',
+    'MT Extra', 'Cambria Math', 'Marlett', 'ZapfDingbats',
+    'Courier New', 'Consolas', 'Menlo', 'Monaco',
+}
+
+# Tracked-change containers — runs inside them are revision content.
+REV_TAGS = {f'{W}ins', f'{W}del', f'{W}moveFrom', f'{W}moveTo'}
+
+
+def _inside_revision(el, parent_map):
+    """True if the element sits inside a tracked-change container."""
+    p = parent_map.get(el)
+    while p is not None:
+        if p.tag in REV_TAGS:
+            return True
+        p = parent_map.get(p)
+    return False
+
+
 ALL_NS = {}
+
+OOXML_KNOWN_NS = {
+    'a': 'http://schemas.openxmlformats.org/drawingml/2006/main',
+    'r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
+    'wp': 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing',
+    'pic': 'http://schemas.openxmlformats.org/drawingml/2006/picture',
+    'wps': 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape',
+    'wpg': 'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup',
+    'mc': 'http://schemas.openxmlformats.org/markup-compatibility/2006',
+    'wp14': 'http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing',
+    'w14': 'http://schemas.microsoft.com/office/word/2010/wordml',
+    'w15': 'http://schemas.microsoft.com/office/word/2012/wordml',
+    'v': 'urn:schemas-microsoft-com:vml',
+    'o': 'urn:schemas-microsoft-com:office:office',
+    'w10': 'urn:schemas-microsoft-com:office:word',
+    'w16se': 'http://schemas.microsoft.com/office/word/2015/wordml/symex',
+    'w16cid': 'http://schemas.microsoft.com/office/word/2016/wordml/cid',
+    'cx': 'http://schemas.microsoft.com/office/drawing/2014/chartex',
+}
 
 
 def collect_namespaces(xml_bytes):
-    """Collect all namespace declarations from the XML to preserve them on write."""
+    """Collect all namespace declarations from the XML to preserve them on write.
+    Also injects missing well-known OOXML namespace declarations into the root element
+    so that ET.fromstring can parse documents with undeclared prefixes."""
+    for prefix, uri in OOXML_KNOWN_NS.items():
+        if prefix not in ALL_NS:
+            ALL_NS[prefix] = uri
+            ET.register_namespace(prefix, uri)
     for match in re.finditer(rb'xmlns:(\w+)="([^"]+)"', xml_bytes):
         prefix = match.group(1).decode()
         uri = match.group(2).decode()
@@ -98,6 +147,23 @@ def collect_namespaces(xml_bytes):
         uri = default_match.group(1).decode()
         if uri not in ALL_NS.values():
             ET.register_namespace('', uri)
+
+
+def inject_missing_namespaces(xml_bytes):
+    """Inject missing well-known OOXML namespace declarations into root element.
+    Converted .doc files often omit declarations for prefixes like a:, wp:, etc."""
+    declared = set(m.group(1).decode() for m in re.finditer(rb'xmlns:(\w+)=', xml_bytes))
+    used = set(m.group(1).decode() for m in re.finditer(rb'<(\w+):', xml_bytes))
+    used.update(m.group(1).decode() for m in re.finditer(rb' (\w+):', xml_bytes))
+    missing = (used - declared) & set(OOXML_KNOWN_NS.keys())
+    if not missing:
+        return xml_bytes
+    injection = b''
+    for prefix in missing:
+        uri = OOXML_KNOWN_NS[prefix]
+        injection += f' xmlns:{prefix}="{uri}"'.encode()
+    return re.sub(rb'(<\w+:?\w+)([ >])', lambda m: m.group(1) + injection + m.group(2),
+                  xml_bytes, count=1)
 
 
 def serialize_xml(original_bytes, modified_root):
@@ -155,6 +221,11 @@ def detect_font_issues(file_path):
         xml_content = z.read('word/document.xml')
         styles_xml = z.read('word/styles.xml') if 'word/styles.xml' in z.namelist() else None
 
+    xml_content = inject_missing_namespaces(xml_content)
+    collect_namespaces(xml_content)
+    if styles_xml:
+        styles_xml = inject_missing_namespaces(styles_xml)
+        collect_namespaces(styles_xml)
     root = ET.fromstring(xml_content)
     issues = []
 
@@ -196,7 +267,9 @@ def detect_font_issues(file_path):
         has_theme = False
         bare_runs = 0
 
-        for run in para.findall(f'{W}r'):
+        # .// so runs nested in hyperlinks/ins/del are also inspected —
+        # keeps detect's scope consistent with what normalize actually fixes.
+        for run in para.findall(f'.//{W}r'):
             if not _run_has_text(run):
                 continue
 
@@ -285,13 +358,19 @@ def detect_font_issues(file_path):
     return issues
 
 
-def normalize_fonts(file_path, output_path=None, cn_font='宋体', en_font='Times New Roman', unify=False):
+def normalize_fonts(file_path, output_path=None, cn_font='宋体', en_font='Times New Roman',
+                    unify=False, skip_revisions=False, backup=True):
     """Normalize all font references in the document.
 
-    Fixes three layers:
+    Fixes four layers:
     1. styles.xml — replace theme refs in docDefaults and styles with explicit fonts
     2. document.xml runs WITH w:rFonts — fix pairings, strip theme attrs
     3. document.xml runs WITHOUT w:rFonts — inject explicit font attributes
+    4. theme1.xml — East Asian (<a:ea>) slots pointing at non-CJK fonts
+
+    skip_revisions: leave runs inside w:ins/w:del untouched, so a document
+    with tracked changes is not silently altered outside the revision flow.
+    Symbol and monospace fonts (PRESERVE_FONTS) are never unified.
     """
     if output_path is None:
         output_path = file_path
@@ -301,12 +380,18 @@ def normalize_fonts(file_path, output_path=None, cn_font='宋体', en_font='Time
         styles_xml = z.read('word/styles.xml') if 'word/styles.xml' in z.namelist() else None
         all_entries = z.namelist()
 
+    xml_content = inject_missing_namespaces(xml_content)
     collect_namespaces(xml_content)
     if styles_xml:
+        styles_xml = inject_missing_namespaces(styles_xml)
         collect_namespaces(styles_xml)
 
     root = ET.fromstring(xml_content)
     fixed_count = 0
+
+    # Parent map (stdlib ET has no getparent()); used by Layer 2 for the
+    # revision check and by Layer 3 for style-aware injection.
+    parent_map = {child: parent for parent in root.iter() for child in parent}
 
     # ── Layer 1: Fix styles.xml ──
     styles_root = None
@@ -334,25 +419,50 @@ def normalize_fonts(file_path, output_path=None, cn_font='宋体', en_font='Time
 
         # Fix ALL rFonts in styles.xml (including nested tblStylePr elements)
         for rFonts in styles_root.findall(f'.//{W}rFonts'):
-            if _has_theme_attrs(rFonts) or unify:
-                _strip_theme_attrs(rFonts)
-                if unify:
-                    rFonts.set(f'{W}ascii', en_font)
-                    rFonts.set(f'{W}eastAsia', cn_font)
-                    rFonts.set(f'{W}hAnsi', en_font)
-                else:
-                    if not rFonts.get(f'{W}ascii'):
-                        rFonts.set(f'{W}ascii', en_font)
-                    if not rFonts.get(f'{W}eastAsia'):
-                        rFonts.set(f'{W}eastAsia', cn_font)
-                    if not rFonts.get(f'{W}hAnsi'):
-                        rFonts.set(f'{W}hAnsi', rFonts.get(f'{W}ascii', en_font))
-
+            need_fix = _has_theme_attrs(rFonts) or unify
+            _strip_theme_attrs(rFonts)
+            if unify:
+                rFonts.set(f'{W}ascii', en_font)
+                rFonts.set(f'{W}eastAsia', cn_font)
+                rFonts.set(f'{W}hAnsi', en_font)
                 styles_changed = True
                 fixed_count += 1
+            else:
+                s_asc = rFonts.get(f'{W}ascii')
+                s_ea = rFonts.get(f'{W}eastAsia')
+                if not s_asc:
+                    rFonts.set(f'{W}ascii', en_font)
+                    need_fix = True
+                if not s_ea:
+                    rFonts.set(f'{W}eastAsia', cn_font)
+                    need_fix = True
+                # Fix cross-script: CJK font as ascii, or Latin font as eastAsia
+                s_asc = rFonts.get(f'{W}ascii')
+                s_ea = rFonts.get(f'{W}eastAsia')
+                if s_asc and s_asc in FONT_PAIRS_CN_TO_EN:
+                    rFonts.set(f'{W}ascii', FONT_PAIRS_CN_TO_EN[s_asc])
+                    need_fix = True
+                if s_ea and s_ea in FONT_PAIRS_EN_TO_CN:
+                    rFonts.set(f'{W}eastAsia', FONT_PAIRS_EN_TO_CN[s_ea])
+                    need_fix = True
+                if not rFonts.get(f'{W}hAnsi'):
+                    rFonts.set(f'{W}hAnsi', rFonts.get(f'{W}ascii', en_font))
+                    need_fix = True
+                # Sync hAnsi with ascii
+                s_asc = rFonts.get(f'{W}ascii')
+                s_hansi = rFonts.get(f'{W}hAnsi')
+                if s_asc and s_hansi != s_asc:
+                    rFonts.set(f'{W}hAnsi', s_asc)
+                    need_fix = True
+                if need_fix:
+                    styles_changed = True
+                    fixed_count += 1
 
     # ── Layer 2: Fix existing w:rFonts in document.xml ──
     for rFonts in root.findall(f'.//{W}rFonts'):
+        if skip_revisions and _inside_revision(rFonts, parent_map):
+            continue
+
         east = rFonts.get(f'{W}eastAsia')
         ascii_font = rFonts.get(f'{W}ascii')
         hansi = rFonts.get(f'{W}hAnsi')
@@ -363,6 +473,11 @@ def normalize_fonts(file_path, output_path=None, cn_font='宋体', en_font='Time
             changed = True
 
         if unify:
+            # Never unify symbol/monospace fonts — that destroys their content.
+            if ascii_font in PRESERVE_FONTS or east in PRESERVE_FONTS:
+                if changed:
+                    fixed_count += 1
+                continue
             if ascii_font != en_font:
                 rFonts.set(f'{W}ascii', en_font)
                 changed = True
@@ -373,6 +488,12 @@ def normalize_fonts(file_path, output_path=None, cn_font='宋体', en_font='Time
                 rFonts.set(f'{W}hAnsi', en_font)
                 changed = True
         else:
+            if not ascii_font and not east:
+                # rFonts exists but carries no explicit fonts (e.g. only w:hint)
+                rFonts.set(f'{W}ascii', en_font)
+                rFonts.set(f'{W}eastAsia', cn_font)
+                rFonts.set(f'{W}hAnsi', en_font)
+                changed = True
             if ascii_font and not east:
                 paired = FONT_PAIRS_EN_TO_CN.get(ascii_font, cn_font)
                 rFonts.set(f'{W}eastAsia', paired)
@@ -381,6 +502,18 @@ def normalize_fonts(file_path, output_path=None, cn_font='宋体', en_font='Time
                 paired = FONT_PAIRS_CN_TO_EN.get(east, en_font)
                 rFonts.set(f'{W}ascii', paired)
                 rFonts.set(f'{W}hAnsi', paired)
+                changed = True
+
+            # Fix cross-script fonts: CJK font in ascii position or Latin font in eastAsia
+            ascii_font = rFonts.get(f'{W}ascii')
+            east = rFonts.get(f'{W}eastAsia')
+            if ascii_font and ascii_font in FONT_PAIRS_CN_TO_EN:
+                correct_en = FONT_PAIRS_CN_TO_EN[ascii_font]
+                rFonts.set(f'{W}ascii', correct_en)
+                rFonts.set(f'{W}hAnsi', correct_en)
+                changed = True
+            if east and east in FONT_PAIRS_EN_TO_CN:
+                rFonts.set(f'{W}eastAsia', FONT_PAIRS_EN_TO_CN[east])
                 changed = True
 
             ascii_font = rFonts.get(f'{W}ascii')
@@ -392,9 +525,27 @@ def normalize_fonts(file_path, output_path=None, cn_font='宋体', en_font='Time
         if changed:
             fixed_count += 1
 
-    # ── Layer 3: Inject w:rFonts into bare runs (no rPr or no rFonts) ──
+    # ── Build style font map for style-aware Layer 3 ──
+    style_fonts = {}
+    if styles_root is not None:
+        for style_el in styles_root.findall(f'{W}style'):
+            sid = style_el.get(f'{W}styleId', '')
+            rPr_el = style_el.find(f'{W}rPr')
+            if rPr_el is not None:
+                rf = rPr_el.find(f'{W}rFonts')
+                if rf is not None:
+                    s_ea = rf.get(f'{W}eastAsia')
+                    s_asc = rf.get(f'{W}ascii')
+                    if s_ea or s_asc:
+                        s_en = s_asc or FONT_PAIRS_CN_TO_EN.get(s_ea, en_font)
+                        s_cn = s_ea or FONT_PAIRS_EN_TO_CN.get(s_asc, cn_font)
+                        style_fonts[sid] = (s_cn, s_en)
+
+    # ── Layer 3: Inject w:rFonts into bare runs (style-aware) ──
     for run in root.findall(f'.//{W}r'):
         if not _run_has_text(run):
+            continue
+        if skip_revisions and _inside_revision(run, parent_map):
             continue
 
         rPr = run.find(f'{W}rPr')
@@ -405,36 +556,100 @@ def normalize_fonts(file_path, output_path=None, cn_font='宋体', en_font='Time
 
         rFonts = rPr.find(f'{W}rFonts')
         if rFonts is None:
+            # Determine font pair from paragraph style
+            run_cn, run_en = cn_font, en_font
+            para = parent_map.get(run)
+            if para is not None and para.tag == f'{W}p':
+                pPr = para.find(f'{W}pPr')
+                if pPr is not None:
+                    pStyle = pPr.find(f'{W}pStyle')
+                    if pStyle is not None:
+                        sid = pStyle.get(f'{W}val', '')
+                        if sid in style_fonts:
+                            run_cn, run_en = style_fonts[sid]
+
             rFonts = ET.SubElement(rPr, f'{W}rFonts')
-            rFonts.set(f'{W}ascii', en_font)
-            rFonts.set(f'{W}eastAsia', cn_font)
-            rFonts.set(f'{W}hAnsi', en_font)
+            rFonts.set(f'{W}ascii', run_en)
+            rFonts.set(f'{W}eastAsia', run_cn)
+            rFonts.set(f'{W}hAnsi', run_en)
             fixed_count += 1
 
-    # ── Write back (preserve original XML declarations and namespaces) ──
+    # ── Layer 4: Fix theme.xml East Asian font slots ──
+    # Only the <a:ea typeface="..."> slots are touched. A blanket
+    # bytes.replace would also rewrite <a:latin> (making English text render
+    # in a CJK font) and corrupt compound names ("Calibri Light" → "宋体 Light").
+    theme_fixed = False
+    theme_xml = None
+    if 'word/theme/theme1.xml' in all_entries:
+        with zipfile.ZipFile(file_path, 'r') as z:
+            theme_xml = z.read('word/theme/theme1.xml')
+        theme_xml, ea_fixed = _fix_theme_ea_fonts(theme_xml, cn_font)
+        if ea_fixed:
+            theme_fixed = True
+            fixed_count += ea_fixed
+            print(f"  Fixed {ea_fixed} theme.xml <a:ea> font slot(s) → {cn_font}")
+
+    # ── Write back ──
+    # Entries are streamed straight from the source zip (no extractall — that
+    # silently drops/merges entries on case-insensitive filesystems). The new
+    # archive is written to a temp file in the output directory, verified,
+    # then atomically swapped in. In-place runs get a timestamped backup first.
     xml_out = serialize_xml(xml_content, root)
     styles_out = serialize_xml(styles_xml, styles_root) if styles_changed and styles_root is not None else None
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        with zipfile.ZipFile(file_path, 'r') as z:
-            z.extractall(tmpdir)
+    replacements = {'word/document.xml': xml_out.encode('utf-8')}
+    if styles_out:
+        replacements['word/styles.xml'] = styles_out.encode('utf-8')
+    if theme_fixed and theme_xml is not None:
+        replacements['word/theme/theme1.xml'] = theme_xml
 
-        doc_xml_path = os.path.join(tmpdir, 'word', 'document.xml')
-        with open(doc_xml_path, 'w', encoding='utf-8') as f:
-            f.write(xml_out)
+    if backup and os.path.abspath(output_path) == os.path.abspath(file_path):
+        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+        base, ext = os.path.splitext(file_path)
+        backup_path = f"{base}_backup_{ts}{ext}"
+        shutil.copy2(file_path, backup_path)
+        print(f"  Backup: {backup_path}")
 
-        if styles_out:
-            styles_path = os.path.join(tmpdir, 'word', 'styles.xml')
-            with open(styles_path, 'w', encoding='utf-8') as f:
-                f.write(styles_out)
-
-        with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zout:
-            for entry in all_entries:
-                full_path = os.path.join(tmpdir, entry)
-                if os.path.isfile(full_path):
-                    zout.write(full_path, entry)
+    out_dir = os.path.dirname(os.path.abspath(output_path)) or '.'
+    fd, tmp = tempfile.mkstemp(suffix='.docx', dir=out_dir)
+    os.close(fd)
+    try:
+        with zipfile.ZipFile(file_path, 'r') as zin, \
+             zipfile.ZipFile(tmp, 'w', zipfile.ZIP_DEFLATED) as zout:
+            for entry in zin.namelist():
+                data = replacements.get(entry)
+                zout.writestr(entry, data if data is not None else zin.read(entry))
+        with zipfile.ZipFile(tmp, 'r') as zf:
+            if 'word/document.xml' not in zf.namelist():
+                raise ValueError('output verification failed: word/document.xml missing')
+        os.replace(tmp, output_path)
+    except Exception:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
 
     return fixed_count
+
+
+def _fix_theme_ea_fonts(theme_xml, cn_font):
+    """Replace non-CJK fonts in <a:ea typeface=...> slots with cn_font.
+    Returns (new_bytes, replacement_count)."""
+    pat = re.compile(rb'(<a:ea typeface=")([^"]*)(")')
+    count = 0
+
+    def _is_cjk_font(name):
+        return (name in FONT_PAIRS_CN_TO_EN
+                or any('一' <= ch <= '鿿' for ch in name))
+
+    def repl(m):
+        nonlocal count
+        val = m.group(2).decode('utf-8')
+        if val and not _is_cjk_font(val):
+            count += 1
+            return m.group(1) + cn_font.encode('utf-8') + m.group(3)
+        return m.group(0)
+
+    return pat.sub(repl, theme_xml), count
 
 
 def extract_textboxes(file_path):
@@ -442,6 +657,8 @@ def extract_textboxes(file_path):
     with zipfile.ZipFile(file_path, 'r') as z:
         xml_content = z.read('word/document.xml')
 
+    xml_content = inject_missing_namespaces(xml_content)
+    collect_namespaces(xml_content)
     root = ET.fromstring(xml_content)
     textboxes = root.findall(f'.//{W}txbxContent')
 
@@ -466,7 +683,12 @@ def main():
     parser.add_argument('--cn', default='宋体', help='Default Chinese font (default: 宋体)')
     parser.add_argument('--en', default='Times New Roman', help='Default English font (default: Times New Roman)')
     parser.add_argument('--detect-only', action='store_true', help='Only detect issues, do not fix')
-    parser.add_argument('--unify', action='store_true', help='Force ALL runs to the same font pair (aggressive mode for academic papers)')
+    parser.add_argument('--unify', action='store_true', help='Force ALL runs to the same font pair (aggressive mode for academic papers; symbol/monospace fonts are preserved)')
+    parser.add_argument('--skip-revisions', action='store_true',
+                        help='Leave runs inside tracked changes (w:ins/w:del) untouched. '
+                             'Use on documents with revision marks meant for reviewers.')
+    parser.add_argument('--no-backup', action='store_true',
+                        help='Skip the timestamped backup created before in-place writes')
     parser.add_argument('--textboxes', action='store_true', help='Extract and display text box content')
     parser.add_argument('--json', action='store_true', help='Output results as JSON')
     parser.add_argument('--check-lock', action='store_true',
@@ -480,10 +702,19 @@ def main():
         sys.exit(1)
 
     if args.check_lock:
-        try:
-            with open(args.input, 'r+b'):
-                pass
-        except (PermissionError, OSError):
+        # Word's owner file is '~$' + the name with its first 1-2 chars removed;
+        # check all variants. (An open() probe alone misses this on macOS,
+        # where Word does not take a mandatory lock.)
+        d = os.path.dirname(os.path.abspath(args.input))
+        name = os.path.basename(args.input)
+        locked = any(os.path.exists(os.path.join(d, f"~${name[i:]}")) for i in (0, 1, 2))
+        if not locked:
+            try:
+                with open(args.input, 'r+b'):
+                    pass
+            except (PermissionError, OSError):
+                locked = True
+        if locked:
             msg = f"Warning: file is locked (likely open in Word): {args.input}"
             if args.json:
                 print(json.dumps({"status": "locked", "message": msg}))
@@ -531,25 +762,33 @@ def main():
 
     # Normalization
     output = args.output or args.input
-    fixed = normalize_fonts(args.input, output, cn_font=args.cn, en_font=args.en, unify=args.unify)
-
-    if args.json:
-        result = {'issues_found': len(issues), 'runs_fixed': fixed, 'output': output}
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-    else:
-        print(f"Fixed {fixed} font attribute(s) with pairing: {args.cn} + {args.en}")
-        print(f"Output: {output}")
+    fixed = normalize_fonts(args.input, output, cn_font=args.cn, en_font=args.en,
+                            unify=args.unify, skip_revisions=args.skip_revisions,
+                            backup=not args.no_backup)
 
     # Verify
     remaining = detect_font_issues(output)
-    if remaining:
-        if not args.json:
+
+    if args.json:
+        result = {
+            'issues_found': len(issues),
+            'runs_fixed': fixed,
+            'output': output,
+            'remaining_issue_count': len(remaining),
+            'remaining_issues': remaining,
+        }
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        if remaining:
+            sys.exit(3)
+    else:
+        print(f"Fixed {fixed} font attribute(s) with pairing: {args.cn} + {args.en}")
+        print(f"Output: {output}")
+        if remaining:
             print(f"\nWarning: {len(remaining)} issue(s) remain after normalization:")
             for issue in remaining:
                 loc = f"P{issue['paragraph']}" if issue['paragraph'] >= 0 else "STYLE"
                 print(f"  {loc}: [{issue['type']}] {issue['detail']}")
-    else:
-        if not args.json:
+        else:
             print("Verification: all font issues resolved.")
 
 

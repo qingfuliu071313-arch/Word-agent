@@ -6,8 +6,10 @@ Repairs all known artifacts that cause format corruption when opened in MS Word.
 Usage:
     python3 fix_libreoffice.py input.docx [output.docx] [--detect-only] [--json]
     python3 fix_libreoffice.py input.docx --skip-font-normalize
+    python3 fix_libreoffice.py input.docx --unify-fonts   # aggressive font unification
 
-This script automatically calls normalize_fonts.py --unify as the final step.
+This script automatically calls normalize_fonts.py (pairing mode) as the final
+step; pass --unify-fonts to force a single font pair on all runs instead.
 """
 
 import zipfile
@@ -295,7 +297,9 @@ def fix_images(doc_xml_bytes, rels_xml_bytes, media_files):
             basename = os.path.basename(target)
             candidates = [f for f in media_files if os.path.basename(f) == basename]
             if candidates:
-                fixes.append(f'image {rid}: path fixed {target}→{candidates[0]}')
+                # Detection only — the rels file is not rewritten here.
+                fixes.append(f'image {rid}: WARNING broken path {target} '
+                             f'(possible match: {candidates[0]}, not auto-fixed)')
             else:
                 fixes.append(f'image {rid}: WARNING broken reference to {target}')
 
@@ -419,7 +423,7 @@ def detect_issues(file_path):
     return all_issues
 
 
-def fix_all(file_path, output_path=None, skip_font_normalize=False):
+def fix_all(file_path, output_path=None, skip_font_normalize=False, unify_fonts=False):
     """Apply all fixes to the converted document."""
     if output_path is None:
         output_path = file_path
@@ -521,18 +525,26 @@ def fix_all(file_path, output_path=None, skip_font_normalize=False):
                     zout.write(full_path, entry)
 
     # Fix 8: Font normalization (calls normalize_fonts.py)
+    # Default is pairing mode: it completes missing eastAsia/ascii pairs and
+    # fixes cross-script mistakes without flattening deliberate font choices.
+    # --unify-fonts opts into the aggressive force-single-pair mode.
     if not skip_font_normalize:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         normalize_script = os.path.join(script_dir, 'normalize_fonts.py')
         if os.path.exists(normalize_script):
-            result = subprocess.run(
-                [sys.executable, normalize_script, output_path, '--unify', '--json'],
-                capture_output=True, text=True
-            )
-            if result.returncode == 0:
+            cmd = [sys.executable, normalize_script, output_path, '--json', '--no-backup']
+            if unify_fonts:
+                cmd.append('--unify')
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            # Exit code 3 = normalized, but some issues remain (still JSON output).
+            if result.returncode in (0, 3):
                 try:
                     font_result = json.loads(result.stdout)
-                    all_fixes.append(f"font normalization: {font_result.get('runs_fixed', 0)} fixes")
+                    msg = f"font normalization: {font_result.get('runs_fixed', 0)} fixes"
+                    remaining = font_result.get('remaining_issue_count', 0)
+                    if remaining:
+                        msg += f' ({remaining} issue(s) remain)'
+                    all_fixes.append(msg)
                 except json.JSONDecodeError:
                     all_fixes.append('font normalization: completed (non-JSON output)')
             else:
@@ -551,6 +563,9 @@ def main():
     parser.add_argument('output', nargs='?', help='Output .docx file (default: overwrite input)')
     parser.add_argument('--detect-only', action='store_true', help='Only detect issues, do not fix')
     parser.add_argument('--skip-font-normalize', action='store_true', help='Skip font normalization step')
+    parser.add_argument('--unify-fonts', action='store_true',
+                        help='Use aggressive --unify font normalization (forces a single '
+                             'font pair on all runs; default is the safer pairing mode)')
     parser.add_argument('--json', action='store_true', help='Output as JSON')
 
     args = parser.parse_args()
@@ -574,7 +589,8 @@ def main():
         return
 
     output = args.output or args.input
-    fixes = fix_all(args.input, output, skip_font_normalize=args.skip_font_normalize)
+    fixes = fix_all(args.input, output, skip_font_normalize=args.skip_font_normalize,
+                    unify_fonts=args.unify_fonts)
 
     if args.json:
         print(json.dumps({'fixes_applied': len(fixes), 'fixes': fixes, 'output': output},

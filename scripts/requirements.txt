@@ -19,7 +19,7 @@ docxcompose>=1.4.0
 citeproc-py>=0.6.0
 
 # Dev dependencies (optional)
-# pytest>=7.0
+pytest>=7.0
 
 # PII scrubbing (optional, ~560MB)
 # python -m spacy download en_core_web_lg

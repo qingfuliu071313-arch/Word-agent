@@ -10,3 +10,12 @@ build/
 *.log
 .omc/
 .claude/
+
+# Test artifacts (fixture is generated programmatically by conftest.py)
+test/output/
+test/fixtures/sample_paper.docx
+test/*.docx
+*_backup_*.docx
+
+# Document Map cache written next to processed documents
+.word-agent/
