@@ -9,7 +9,7 @@ description: >-
   check references, cross-reference, verify format, compliance.
 allowed-tools: Read Bash Glob Grep mcp__word-document-server__get_document_text mcp__word-document-server__get_document_outline mcp__word-document-server__find_text_in_document mcp__word-document-server__get_document_info mcp__word-document-server__validate_document_footnotes mcp__word-document-server__get_all_comments mcp__word-document-server__get_paragraph_text_from_document mcp__word-document-server__get_document_xml mcp__docx-mcp__validate_paraids mcp__docx-mcp__audit_document mcp__word-mcp-live__diagnose_layout
 metadata:
-    version: "1.0.0"
+    version: "1.1.0"
     category: verification
     upstream-skills: [word-read, word-format, word-edit]
     downstream-skills: [word-format, word-submit]

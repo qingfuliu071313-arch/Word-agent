@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 ## What This Is
 
-word-agent is a **Claude Code plugin** (v1.0.0) for academic paper Word document operations. It provides 9 specialized agents covering the full manuscript lifecycle: document analysis, formatting, content editing, reference management, table/figure formatting, review handling, quality checking, and submission preparation.
+word-agent is a **Claude Code plugin** (v1.1.0) for academic paper Word document operations. It provides 9 specialized agents covering the full manuscript lifecycle: document analysis, formatting, content editing, reference management, table/figure formatting, review handling, quality checking, and submission preparation.
 
 **Target users:** Researchers who write and edit academic papers in Microsoft Word, with bilingual (EN/中文) support.
 

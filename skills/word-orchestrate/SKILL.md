@@ -10,7 +10,7 @@ description: >-
   "full preparation", "全流程".
 allowed-tools: Read Bash Glob Grep mcp__word-document-server__get_document_info mcp__word-document-server__get_document_outline mcp__word-document-server__list_available_documents mcp__word-mcp-live__get_active_document
 metadata:
-    version: "1.0.0"
+    version: "1.1.0"
     category: coordination
     downstream-skills: [word-read, word-format, word-edit, word-reference, word-table-figure, word-review, word-check, word-submit]
 ---

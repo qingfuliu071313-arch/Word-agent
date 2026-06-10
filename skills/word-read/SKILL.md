@@ -9,7 +9,7 @@ description: >-
   Not for editing (word-edit) or formatting (word-format).
 allowed-tools: Read Write Bash Glob Grep mcp__word-document-server__get_document_info mcp__word-document-server__get_document_outline mcp__word-document-server__get_document_text mcp__word-document-server__get_paragraph_text_from_document mcp__word-document-server__find_text_in_document mcp__word-document-server__get_all_comments mcp__word-document-server__get_comments_by_author mcp__word-document-server__validate_document_footnotes mcp__word-document-server__get_document_xml mcp__word-document-server__list_available_documents mcp__docx-mcp__get_tracked_changes
 metadata:
-    version: "1.0.0"
+    version: "1.1.0"
     category: analysis
     downstream-skills: [word-format, word-edit, word-reference, word-table-figure, word-review, word-check, word-submit]
 ---

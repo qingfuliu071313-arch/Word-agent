@@ -9,7 +9,7 @@ description: >-
   bibliography, citation, footnote, endnote.
 allowed-tools: Read Write Bash Glob Grep mcp__word-document-server__add_footnote_to_document mcp__word-document-server__add_endnote_to_document mcp__word-document-server__delete_footnote_from_document mcp__word-document-server__validate_document_footnotes mcp__word-document-server__search_and_replace mcp__word-document-server__find_text_in_document mcp__word-document-server__get_document_text mcp__word-document-server__get_paragraph_text_from_document mcp__word-document-server__add_paragraph mcp__word-document-server__delete_paragraph mcp__word-document-server__replace_paragraph_block_below_header mcp__zotero__search_items mcp__zotero__get_item mcp__zotero__export_bibliography mcp__zotero__get_item_children mcp__semantic-scholar__search_papers mcp__semantic-scholar__get_paper
 metadata:
-    version: "1.0.0"
+    version: "1.1.0"
     category: editing
     upstream-skills: [word-read]
     downstream-skills: [word-check]

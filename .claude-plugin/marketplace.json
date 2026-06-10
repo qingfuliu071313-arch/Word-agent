@@ -9,7 +9,7 @@
       "name": "word-agent",
       "source": "./",
       "description": "Academic paper Word document agent with specialized modules for document analysis, formatting, content editing, reference management, table/figure formatting, review handling, quality checking, and submission preparation.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "tags": ["word", "docx", "academic", "paper", "formatting", "manuscript", "review"],
       "category": "Research"
     }

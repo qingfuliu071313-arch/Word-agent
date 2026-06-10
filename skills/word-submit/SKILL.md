@@ -9,7 +9,7 @@ description: >-
   补充材料, 合并, merge, split, 投稿准备.
 allowed-tools: Read Write Edit Bash Glob Grep mcp__word-document-server__get_all_comments mcp__word-document-server__get_document_info mcp__word-document-server__copy_document mcp__word-document-server__protect_document mcp__word-document-server__unprotect_document mcp__word-document-server__get_document_text mcp__word-document-server__get_document_outline mcp__word-document-server__get_paragraph_text_from_document mcp__word-document-server__find_text_in_document mcp__word-document-server__get_document_xml mcp__word-document-server__delete_paragraph mcp__docx-mcp__accept_changes mcp__docx-mcp__reject_changes mcp__docx-mcp__get_tracked_changes mcp__word-mcp-live__delete_comment mcp__word-mcp-live__resolve_comment mcp__word-mcp-live__add_watermark mcp__docx-mcp__remove_watermark mcp__docx-mcp__scrub_pii mcp__docx-mcp__validate_paraids mcp__docx-mcp__audit_document
 metadata:
-    version: "1.0.0"
+    version: "1.1.0"
     category: submission
     upstream-skills: [word-read, word-check]
     downstream-skills: []

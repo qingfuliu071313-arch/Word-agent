@@ -9,7 +9,7 @@ description: >-
   replace, 添加段落, 删除段落, tracked changes, 修订模式.
 allowed-tools: Read Write Edit Bash Glob Grep mcp__word-document-server__create_document mcp__word-document-server__create_custom_style mcp__word-document-server__copy_document mcp__word-document-server__add_heading mcp__word-document-server__format_text mcp__word-document-server__search_and_replace mcp__word-document-server__insert_line_or_paragraph_near_text mcp__word-document-server__replace_paragraph_block_below_header mcp__word-document-server__replace_block_between_manual_anchors mcp__word-document-server__delete_paragraph mcp__word-document-server__add_paragraph mcp__word-document-server__insert_header_near_text mcp__word-document-server__insert_numbered_list_near_text mcp__word-document-server__find_text_in_document mcp__word-document-server__get_paragraph_text_from_document mcp__word-document-server__get_document_outline mcp__word-mcp-live__edit_text mcp__word-mcp-live__insert_text mcp__word-mcp-live__delete_text mcp__word-mcp-live__replace_text mcp__word-mcp-live__get_active_document mcp__word-mcp-live__undo_last_operation mcp__word-mcp-live__insert_equation mcp__word-mcp-live__insert_cross_reference
 metadata:
-    version: "1.0.0"
+    version: "1.1.0"
     category: editing
     upstream-skills: [word-read]
     downstream-skills: [word-check]

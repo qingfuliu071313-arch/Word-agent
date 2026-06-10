@@ -1,4 +1,4 @@
-# Word-Agent v1.0.0
+# Word-Agent v1.1.0
 
 **A Claude Code plugin for academic paper Word document operations.**
 

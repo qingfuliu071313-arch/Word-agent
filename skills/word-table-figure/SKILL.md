@@ -7,7 +7,7 @@ description: >-
   Triggers: 表格, 三线表, 图片, 插图, 题注, table, figure, image, caption.
 allowed-tools: Read Bash Glob Grep mcp__word-document-server__add_table mcp__word-document-server__format_table mcp__word-document-server__format_table_cell_text mcp__word-document-server__set_table_width mcp__word-document-server__set_table_column_widths mcp__word-document-server__auto_fit_table_columns mcp__word-document-server__merge_table_cells_horizontal mcp__word-document-server__merge_table_cells_vertical mcp__word-document-server__highlight_table_header mcp__word-document-server__set_table_cell_shading mcp__word-document-server__set_table_cell_alignment mcp__word-document-server__set_table_cell_padding mcp__word-document-server__set_table_alignment_all mcp__word-document-server__apply_table_alternating_rows mcp__word-document-server__add_picture mcp__word-document-server__add_paragraph mcp__word-document-server__create_custom_style mcp__word-document-server__find_text_in_document mcp__word-document-server__get_paragraph_text_from_document mcp__word-mcp-live__insert_equation
 metadata:
-    version: "1.0.0"
+    version: "1.1.0"
     category: editing
     upstream-skills: [word-read]
     downstream-skills: [word-check]
