@@ -40,15 +40,33 @@ Word Reviewer processes reviewer/editor comments, plans a revision strategy for 
 
 ### Source A: In-Document Comments
 
+**Canonical path — `scripts/extract_comments.py` (REQUIRED; do NOT use the MCP tool to locate comments):**
+
+```bash
+python3 scripts/extract_comments.py "{file_path}"             # JSON
+python3 scripts/extract_comments.py "{file_path}" --markdown  # table
+# filters: --author "Reviewer 1"   --paragraph N
 ```
-1. get_all_comments(file_path)
-2. Structure each comment:
-   - Comment ID
-   - Author
-   - Text
-   - Location (paragraph number)
-   - Is it a reply to another comment?
-```
+
+⚠️ The external `get_all_comments` tool returns the comment *text* but always
+reports `paragraph_index: null` and `reference_text: ""` — it never resolves
+which body text a comment is anchored to, so you cannot act on it.
+`get_comments_for_paragraph` is consequently always empty. **Always read
+in-document comments with `extract_comments.py`**, which resolves the anchor.
+
+Each comment record contains:
+   - `comment_id`, `author`, `initials`, `date`
+   - `text` — the comment content
+   - `reference_text` — **the exact body text the comment is anchored to**;
+     feed this to `find_text_in_document` / `search_and_replace` to locate the edit target
+   - `paragraph_index` — body paragraph index (`null` when `in_table` is true)
+   - `in_table` — anchor is inside a table cell
+   - `resolved` — thread already marked done
+   - `parent_id` / `is_reply` — reply threading
+
+Fallback only if the script errors (e.g. python-docx unavailable):
+`get_all_comments(file_path)` for text/author, then locate anchors manually via
+`get_document_xml` (parse `w:commentRangeStart`/`w:commentRangeEnd` by `w:id`).
 
 ### Source B: External Document/Email
 
@@ -63,14 +81,17 @@ Word Reviewer processes reviewer/editor comments, plans a revision strategy for 
 
 ### Output: Structured Comment Table
 
+For in-document comments, include the **anchored text** (from `reference_text`)
+so every change has a precise edit target:
+
 ```markdown
-| # | Reviewer | Category | Comment Summary | Location |
-|---|----------|----------|----------------|----------|
-| 1 | R1 | Major | Sample size justification needed | Methods 2.2 |
-| 2 | R1 | Minor | Typo in abstract line 3 | Abstract |
-| 3 | R2 | Major | Add discussion of limitations | Discussion |
-| 4 | R2 | Minor | Update reference [12] | References |
-| 5 | Editor | Editorial | Shorten abstract to 250 words | Abstract |
+| # | Reviewer | Category | Comment Summary | Anchored Text (¶/loc) |
+|---|----------|----------|----------------|-----------------------|
+| 1 | R1 | Major | Sample size justification needed | "small pilot sample of 12…" (¶24) |
+| 2 | R1 | Minor | Typo in abstract line 3 | "the the effect" (¶2) |
+| 3 | R2 | Major | Add discussion of limitations | "We conclude the intervention…" (¶57) |
+| 4 | R2 | Minor | Update reference [12] | "[12]" (¶80) |
+| 5 | Editor | Editorial | Shorten abstract to 250 words | (whole Abstract) |
 ```
 
 ---
@@ -170,33 +191,46 @@ See `../../references/adeu_integration.md` for pipeline details.
 
 ## Phase 3.5: Comment-Based Reply Workflow
 
-After executing revisions, reply to in-document comments using word-mcp-live. This creates a threaded conversation visible in Word's comment pane.
+After executing revisions, reply to in-document comments and mark them resolved.
+This creates a threaded conversation visible in Word's comment pane.
+
+**Canonical path — `scripts/comment_write.py` (pure XML, cross-platform, no
+word-mcp-live / no Word needed).** Use the `comment_id` from `extract_comments.py`
+(Phase 1). Process comments bottom-up is unnecessary here — comment ops don't
+shift text positions.
 
 ### For ACCEPT/PARTIAL comments:
 
-```
-1. (Phase 3 already executed the document change)
-2. Reply to comment:
-   mcp__word-mcp-live__reply_to_comment(file_path, comment_id, reply_text)
-   - ACCEPT:  "已按建议修改。见修订标记。"
-   - PARTIAL: "已部分采纳。[说明替代方案]。见修订标记。"
-3. Resolve comment:
-   mcp__word-mcp-live__resolve_comment(file_path, comment_id)
+```bash
+# 1. (Phase 3 already executed the document change)
+# 2. Reply (ACCEPT: "已按建议修改。见修订标记。"  PARTIAL: "已部分采纳。[替代方案]。见修订标记。")
+python3 scripts/comment_write.py "{file_path}" reply --id {comment_id} \
+    --text "已按建议修改。见修订标记。" --author "Author"
+# 3. Mark resolved
+python3 scripts/comment_write.py "{file_path}" resolve --id {comment_id}
 ```
 
 ### For REBUT/DEFER comments:
 
-```
-1. Reply to comment with rationale (do NOT resolve):
-   mcp__word-mcp-live__reply_to_comment(file_path, comment_id, reply_text)
-   - REBUT: "感谢建议。我们认为原文表述更准确，理由如下：[理由]。详见 response to reviewers。"
-   - DEFER: "感谢建议。此问题将在后续研究中解决。详见 response to reviewers。"
-2. Do NOT resolve — leave for user to decide after reviewing
+```bash
+# Reply with rationale, do NOT resolve (leave for user to decide):
+#   REBUT: "感谢建议。我们认为原文表述更准确，理由如下：[理由]。详见 response to reviewers。"
+#   DEFER: "感谢建议。此问题将在后续研究中解决。详见 response to reviewers。"
+python3 scripts/comment_write.py "{file_path}" reply --id {comment_id} \
+    --text "感谢建议。……详见 response to reviewers。" --author "Author"
 ```
 
-### Fallback
+The script writes a timestamped `*_backup_*.docx` before its first edit (pass
+`--no-backup` to suppress). Each op edits in place by default; pass `--output PATH`
+to write a copy.
 
-If word-mcp-live is unavailable, skip Phase 3.5. Comment replies will only appear in the point-by-point response document (Phase 4).
+### Optional alternate path
+
+If `word-mcp-live` is installed and configured, its native `reply_to_comment` /
+`resolve_comment` are equivalent. But it is NOT required and is often absent
+(and capability-reduced on macOS), so **default to `comment_write.py`**. If
+neither is available (e.g. python-docx missing), skip Phase 3.5 — replies will
+still appear in the point-by-point response document (Phase 4).
 
 See `../../references/comment_operations.md` for the full comment model and operations reference.
 

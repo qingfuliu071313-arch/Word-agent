@@ -125,7 +125,12 @@ The JSON output includes `parts_with_textboxes`, attributing each text box to it
 ### Step 4: Comment, Footnote & Tracked Changes Check (If Present)
 
 ```
-Call: get_all_comments(file_path)           → if document has comments
+Comments → python3 scripts/extract_comments.py "{file_path}"   → if document has comments
+  → Extract per comment: author, text, reference_text (anchored body text),
+    paragraph_index, resolved, is_reply. Record these in the Document Map so
+    downstream modules (esp. word-review) can locate edit targets WITHOUT
+    re-reading. Do NOT use get_all_comments here: it returns null location and
+    empty reference_text (cannot anchor a comment to the body).
 Call: validate_document_footnotes(file_path) → if document has footnotes
 Call: mcp__docx-mcp__get_tracked_changes(file_path) → if document may have revisions
   → Extract: total count, insertions vs deletions, author distribution, affected sections
@@ -196,8 +201,15 @@ Compile all gathered information into the standard Document Map format:
 - Text Boxes: {count} (content summary below if present)
 - Footnotes: {count}
 - Endnotes: {count}
-- Comments: {count} (by: {author1} ×{n}, {author2} ×{n})
+- Comments: {count} (by: {author1} ×{n}, {author2} ×{n}) — detail in Comments section below
 - Tracked Changes: {count} (ins: {n}, del: {n}, by: {author1} ×{n}, {author2} ×{n})
+
+### Comments (if any)
+List each comment with its anchored body text so downstream edits have a target:
+- [C{comment_id}] {author}{ " (reply→C"+parent_id+")" if is_reply }{ " [resolved]" if resolved } @ ¶{paragraph_index}{ "/table" if in_table }
+  - anchor: "{reference_text}"
+  - says: "{comment text}"
+(omit this section if no comments found; source: scripts/extract_comments.py)
 
 ### Text Boxes (if any)
 - [TextBox 1] ({source part, e.g. word/header2.xml}): "{first 100 chars of content}..."

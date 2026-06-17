@@ -63,22 +63,22 @@ Step 2: Accept all tracked changes (if not handled by Step 1.5 Option B/C)
   → accept_changes.py 是本插件 scripts/ 内的 XML fallback 脚本（接受全部修订）
 
 Step 3: Remove comments (选择性批注管理)
+  → All options use scripts/comment_write.py (pure XML, cross-platform, no
+    word-mcp-live / no Word needed). It also strips the matching
+    commentRangeStart/End/commentReference markers, so no orphans remain.
   → User chooses:
     Option A: 删除全部批注 (default)
-      → Via XML manipulation:
-         a. Unpack: python3 scripts/office/unpack.py {clean_path} unpacked/
-         b. Remove all <w:comment> elements from word/comments.xml
-         c. Remove all <w:commentRangeStart>, <w:commentRangeEnd>,
-            <w:commentReference> from word/document.xml
-         d. Repack: python3 scripts/office/pack.py unpacked/ {clean_path}
+      → python3 scripts/comment_write.py {clean_path} delete-all --no-backup
     Option B: 仅删除已 resolved 批注
-      → get_all_comments → filter resolved → delete each:
-         mcp__word-mcp-live__delete_comment(clean_path, comment_id)
+      → List with resolved status:
+         python3 scripts/extract_comments.py {clean_path}   # read `resolved`
+      → For each comment whose resolved == true:
+         python3 scripts/comment_write.py {clean_path} delete --id {comment_id} --no-backup
       → Keep unresolved comments for author review
     Option C: 按作者删除
-      → get_comments_by_author → user selects authors to remove
-      → mcp__word-mcp-live__delete_comment for matching comments
-      → E.g., delete all "Claude" auto-replies, keep reviewer comments
+      → python3 scripts/comment_write.py {clean_path} delete --author "{name}" --no-backup
+      → E.g., delete all "Author"/"Claude" auto-replies, keep reviewer comments
+      → Deleting a top-level comment also removes its replies (whole thread)
 
 Step 4: Strip personal metadata
   → Via XML manipulation on unpacked/docProps/core.xml:

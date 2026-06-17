@@ -38,7 +38,7 @@ adeu                 → python3 -c "import adeu"（不可用时跳过 P4 路由
 | 读取全文 | `get_document_text` | `docx2python` | 仅在确实需要全文时使用 |
 | 查找文本 | `find_text_in_document` | `get_document_text` + 搜索 | MCP 原生搜索更快 |
 | 提取文本框内容 | `python3 scripts/extract_textboxes.py` | `get_document_xml` + 手动解析 | MCP 和 docx2python 均跳过文本框；文本框常在页眉等 document.xml 之外的部件，脚本扫描全部 XML 部件 |
-| 获取批注 | `get_all_comments` | `get_comments_by_author` | word-document-server 读取 |
+| 获取批注（含锚定正文） | `python3 scripts/extract_comments.py` | `get_all_comments`（仅文本，无锚定） | `get_all_comments` 不返回批注锚定的正文位置（`paragraph_index=null`/`reference_text=""`）；脚本解析 `commentRangeStart/End` 还原锚定文本，支持 `--author`/`--paragraph`/`--markdown` |
 | 获取修订列表 | `mcp__docx-mcp__get_tracked_changes` | XML 手动解析 | docx-mcp 提供结构化修订信息 |
 
 ### 内容编辑操作
@@ -70,13 +70,14 @@ adeu                 → python3 -c "import adeu"（不可用时跳过 P4 路由
 
 | 操作 | 首选路径 | 备选路径 | 说明 |
 |------|---------|---------|------|
-| 读取批注 | `get_all_comments` | `get_comments_by_author` | word-document-server |
-| 添加批注 | `mcp__word-mcp-live__add_comment` | `comment.py` XML 脚本 | word-mcp-live 支持锚定到段落/文本 |
-| 回复批注 | `mcp__word-mcp-live__reply_to_comment` | — | 仅 word-mcp-live 支持 |
-| 解析批注 | `mcp__word-mcp-live__resolve_comment` | — | 仅 word-mcp-live 支持 |
-| 取消解析 | `mcp__word-mcp-live__unresolve_comment` | — | 仅 word-mcp-live 支持 |
-| 删除单条批注 | `mcp__word-mcp-live__delete_comment` | — | 仅 word-mcp-live 支持 |
-| 删除所有批注 | XML 清除 comments.xml | — | word-submit 清理流程 |
+| 读取批注（含锚定正文） | `python3 scripts/extract_comments.py` | `get_all_comments`（仅文本，无锚定，备用） | ⚠️ `get_all_comments` 返回 `paragraph_index=null`、`reference_text=""`，无法定位批注指向的正文；必须用脚本。脚本支持 `--author` / `--paragraph` / `--markdown` |
+| 回复批注 | `python3 scripts/comment_write.py reply --id N --text …` | `mcp__word-mcp-live__reply_to_comment`（可选） | 脚本纯 XML，跨平台、无依赖；word-mcp-live 需另装且 macOS 受限 |
+| 标记已解决 | `python3 scripts/comment_write.py resolve --id N` | `mcp__word-mcp-live__resolve_comment`（可选） | 写 `commentsExtended.xml` 的 `w15:done` |
+| 取消解析 | `python3 scripts/comment_write.py unresolve --id N` | `mcp__word-mcp-live__unresolve_comment`（可选） | 同上 |
+| 删除单条批注 | `python3 scripts/comment_write.py delete --id N` | `mcp__word-mcp-live__delete_comment`（可选） | 同时清除 range/reference 标记，删父批注会级联删回复 |
+| 按作者删除 | `python3 scripts/comment_write.py delete --author NAME` | — | — |
+| 删除所有批注 | `python3 scripts/comment_write.py delete-all` | — | word-submit 清理流程 |
+| 添加批注（新建，非回复） | `mcp__word-mcp-live__add_comment`（可选） | XML 手动插入 | 新建独立批注需锚定到正文范围；脚本暂只做回复/解析/删除 |
 
 ### 格式化操作
 
@@ -167,9 +168,11 @@ adeu                 → python3 -c "import adeu"（不可用时跳过 P4 路由
   → 否 → XML unpack/edit/pack (Legacy)
 
 需要批注操作？
-  → 仅读取 → word-document-server (get_all_comments)
-  → 添加/回复/resolve → word-mcp-live
-  → 全部删除 → XML 清除
+  → 读取（定位/按批注修改）→ scripts/extract_comments.py（唯一能解析锚定正文）
+  → 仅需文本计数且脚本不可用 → get_all_comments（无锚定，降级）
+  → 回复/标记已解决/取消/删除 → scripts/comment_write.py（纯 XML，跨平台，无依赖）
+  → （可选）若已装 word-mcp-live，其 reply/resolve/delete 等价可用
+  → 新建独立批注（非回复）→ word-mcp-live add_comment 或 XML 手动插入
 
 需要结构验证？
   → docx-mcp (validate_paraids / audit_document)
